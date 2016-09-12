@@ -14,13 +14,17 @@ namespace glad {
             delete hinode; 
         }
         
-        bool is_string() { return end_string; }
-        bool is_leaf() { return !lonode && !eqnode && !hinode; }
+        bool is_end() {
+            return label.at(label.size()-1) == 3;
+        }
+        
+        bool is_leaf() { 
+            return !lonode && !eqnode && !hinode;
+        }
         
         string label;
         tnode *lonode;
         tnode *eqnode;
         tnode *hinode;
-        bool end_string = false;
     };
 }

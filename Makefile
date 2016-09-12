@@ -5,7 +5,7 @@ CXX 			= g++
 CXX_FLAGS 		= -std=c++11 -O3 -march=native
 CXX_FLAGS_NO_OPT 	= -std=c++11 -O0
 
-INCLUDES		= -I sdsl/include/ -L sdsl/lib/
+INCLUDES		= -I sdsl/include/ -I include/tst/ -L sdsl/lib/
 DEBUG			= -g -pg
 build			= build
 
