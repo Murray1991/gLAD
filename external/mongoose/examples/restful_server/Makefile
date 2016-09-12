@@ -1,0 +1,3 @@
+PROG = restful_server
+MODULE_CFLAGS=-DMG_ENABLE_THREADS -DMG_DISABLE_HTTP_WEBSOCKET
+include ../examples.mk
