@@ -9,6 +9,7 @@
 #include "tnode.hpp"
 
 using namespace std;
+using namespace sdsl;
 
 namespace glad {
  
@@ -20,7 +21,7 @@ namespace glad {
     
     template<typename t_bv = sdsl::sd_vector<>,
          typename t_sel= typename t_bv::select_1_type,
-         typename t_rac_weight = sdsl::int_vector<>,
+         typename t_weight = sdsl::int_vector<>,
          typename t_bp_support = sdsl::bp_support_sada<>,
          typename t_bp_rnk10 = sdsl::rank_support_v5<10,2>,
          typename t_bp_sel10 = sdsl::select_support_mcl<10,2>,
@@ -30,15 +31,27 @@ namespace glad {
          
     class tst {
         
+        typedef sdsl::int_vector<8> t_label;
+        
+        t_label             m_label;
+        t_weight            m_weight;
+        t_bv_uc             m_bp;
+        t_bv_uc             m_helper;
+        t_bp_support        m_bp_support;
+        
+        t_bv                m_start_bv;
+        t_sel               m_start_sel;
+        t_bp_rnk10          m_bp_rnk10;
+        t_bp_sel10          m_bp_sel10;
+        
     private:
-        void process_input(const std::string& filename, tVPSU& string_weight, uint64_t& N, uint64_t& n) const{
-            
+        
+        void process_input(const std::string& filename, tVPSU& string_weight) const{
             std::ifstream in(filename);
             if ( !in ) {
                 cerr << "Error: Could not open file " << filename << endl;
                 exit(EXIT_FAILURE);
             }
-            
             std::string entry;
             while ( std::getline(in, entry, '\t')) {
                 std::transform(entry.begin(), entry.end(), entry.begin(), ::tolower);
@@ -47,11 +60,9 @@ namespace glad {
                 uint64_t weight = stoull(s_weight);
                 string_weight.emplace_back(entry + EOS, weight);
             }
-            
             std::sort(string_weight.begin(), string_weight.end(), [](const tPSU& a, const tPSU& b) {
                 return a.first.compare(b.first) < 0;
             });
-            
             auto unique_end = std::unique(string_weight.begin(), string_weight.end(), [](tPSU& a, tPSU& b) {
                 if ( a.first.size() != b.first.size() )
                     return false;
@@ -61,65 +72,118 @@ namespace glad {
                 }
                 return false;
             });
-            
             string_weight.resize(unique_end-string_weight.begin());
-            
-            for ( auto it = string_weight.begin() ; it != string_weight.end(); it++ ) {
-                N += 1;
-                n += it->first.size();
-            }
         }
         
     public:
+        
         tst() {}
+        
         ~tst() {}
+        
         tst(const std::string& filename) {
-            uint64_t n = 0, N = 0;
+            uint64_t n = 0, N = 0, max_weight = 0;
             tVPSU string_weight;
-            process_input(filename, string_weight, N, n);
-            std::cout << n << " " << N << std::endl;
-            build_tst_bp(string_weight, N, n);
+            process_input(filename, string_weight);
+            for ( auto it = string_weight.begin() ; it != string_weight.end(); it++ ) {
+                N += 1;
+                n += it->first.size();
+                max_weight = max_weight > it->second ? max_weight : it->second;
+            }
+            //m_weight = t_weight (N, 0, bits::hi(max_weight)+1);
+            //for ( size_t i = 0; i < N ; m_weight[i] = string_weight[i++].second );
+            build_tst_bp(string_weight, N, n, max_weight);
         }
 
     private:
-        void build_tst_bp(tVPSU& string_weight, uint64_t N, uint64_t n) {
-            tnode * root = build_tst(string_weight, 0, N-1, 0, 0);
-            num_nodes = count_nodes(root);
+        
+        sdsl::bit_vector::iterator bp_it;
+        sdsl::bit_vector::iterator start_it;
+        sdsl::bit_vector::iterator helper_it;
+        sdsl::int_vector<8>::iterator label_it;
+        
+        void build_tst_bp(tVPSU& string_weight, uint64_t N, uint64_t n, uint64_t max_weight) {
+            //TODO check the initialization values...
+            t_bv_uc start_bv(2*N+n+2, 0);
+            m_label     = t_label(n);
+            m_bp        = t_bv_uc(2*2*N, 0);
+            m_helper    = t_bv_uc(n+N, 0);
+            
+            bp_it       = m_bp.begin();
+            start_it    = start_bv.begin();
+            label_it    = m_label.begin();
+            helper_it   = m_helper.begin();
+
+            *(start_it++) = 1;
+            tnode * root  = build_tst(string_weight, 0, N-1, 0, 0);
+            delete root;
+            
+            m_bp.resize(bp_it-m_bp.begin()); 
+            m_label.resize(label_it-m_label.begin()); 
+            start_bv.resize(start_it-start_bv.begin());
+            
+            m_start_bv   = t_bv(start_bv);
+            m_start_sel  = t_sel(&m_start_bv);
+            m_bp_support = t_bp_support(&m_bp);
+            m_bp_rnk10   = t_bp_rnk10(&m_bp);
+            m_bp_sel10   = t_bp_sel10(&m_bp);
+            
             num_leaves = count_leaves(root);
-            cout << "num leaves: " << num_leaves+numm << endl;
-            cout << "start lookup_test\n";
-            lookup_test(root, string_weight);
+            cout << "leaves: " << num_leaves << " ; strings: " << N << endl;
         }
         
         tnode *build_tst(const tVPSU& string_weight, int64_t first, int64_t last, int64_t index, int64_t level) {
             
-            if ( first > last )
+            if ( first > last || ( first == last && string_weight[first].first.length() == index ) )
                 return nullptr;
-
+            
             char ch;
             uint64_t sx, dx;
             std::tie(sx, dx, ch) = partitionate(string_weight, first, last, index);
-
+            sdsl::bit_vector::iterator it;
+            
+            if ( level < 2 ) {
+                *(bp_it++) = 1;
+                start_it++;
+                *(label_it) = ch; 
+                *(start_it++) = 1;
+                it = helper_it++;
+            }
+            
             tnode *node = new tnode(ch);
-
-            if ( first <= last && ch != EOS ) {
-                node->lonode = build_tst(string_weight, first, sx-1, index, level+1);
-                node->eqnode = build_tst(string_weight, sx, dx, index+1, level+1);
-                node->hinode = build_tst(string_weight, dx+1, last, index, level+1);
-            } else if ( first <= last && ch == EOS ) {
-                assert ( first == last || first == last-1 );
-                node->hinode = build_tst(string_weight, dx+1, last, index, level+1);
-            } else {
-                cerr << "wtf...\n";
-                exit(EXIT_FAILURE);
+            node->lonode = build_tst(string_weight, first, sx-1, index, level+1);
+            node->eqnode = build_tst(string_weight, sx, dx, index+1, level+1);
+            node->hinode = build_tst(string_weight, dx+1, last, index, level+1);
+            
+            if ( level < 2 ) {
+                bp_it++;
+                *it = (node->hinode != nullptr);
             }
             
             if ( level == 2 ) {
-                cout << ch << endl;
                 compress(node);
+                mark(node);
+                delete node;
+                node = nullptr;
             }
             
             return node;
+        }
+        
+        void mark(tnode * node) {
+            
+            if ( node == nullptr )
+                return;
+            
+            for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
+            *(helper_it++) = (node->hinode != nullptr);
+            *(start_it++) = 1;
+            *(bp_it++) = 1;
+            mark(node->lonode);
+            mark(node->eqnode);
+            mark(node->hinode);
+            
+            bp_it++;
         }
         
         inline void clear (tnode * node) {
@@ -144,7 +208,6 @@ namespace glad {
             
             if ( !node->lonode && !node->eqnode && node->is_end() && node->hinode ) {
                 /* in this case node->hinode is not compressed yet -> rotation! */
-
                 int len = node->label.length();
                 char lchar = node->label.at(len-1);
                 node->lonode = new tnode(lchar);
@@ -157,10 +220,6 @@ namespace glad {
                 delete tmp;
             }
             
-            if ( node->lonode && !node->eqnode && node->is_end() && !node->hinode ) {
-                cout << "y";
-            }
-            
             compress(node->lonode);
             compress(node->eqnode);
             compress(node->hinode);
@@ -169,8 +228,8 @@ namespace glad {
         /* fa veramente schifo */
         tTUUC partitionate(const tVPSU& string_weight, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
-            char ch = string_weight[m].first.at(index);
             uint64_t sx, dx;
+            char ch = string_weight[m].first.at(index);
             for ( sx = first; sx < last && string_weight[sx].first.size() > index && string_weight[sx].first.at(index) != ch; sx++ );
             for ( dx = last; dx > first && string_weight[dx].first.size() > index && string_weight[dx].first.at(index) != ch; dx-- );
             return make_tuple(sx,dx,ch);
@@ -220,14 +279,12 @@ namespace glad {
         }
         
         void lookup_test(tnode *root, tVPSU& string_weight) {
-            
             for (auto it = string_weight.begin(); it != string_weight.end(); it++ ) {
                 if ( ! lookup(root, 0, it->first) ) {
                     cerr << "error for " << it->first << " , index: " << it - string_weight.begin() << endl;
                     exit(EXIT_FAILURE);
                 }
             }
-            
             cout << "all correct!\n";
         }
         
@@ -235,17 +292,40 @@ namespace glad {
         size_t num_leaves = 0;
         
         size_t count_leaves(tnode *node) {
-            if ( node == nullptr )
-                return 0;
-            if ( node->is_leaf() )
-                return 1;
-            return count_leaves(node->lonode) + count_leaves(node->eqnode) + count_leaves(node->hinode);
+            return m_bp_rnk10(m_bp_support.find_close(0)+1);
         }
         
         size_t count_nodes(tnode *node) {
             if ( node == nullptr )
                 return 0;
             return 1 + count_nodes(node->lonode) + count_nodes(node->eqnode) + count_nodes(node->hinode); 
+        }
+        
+        // Map node v to its unique identifier. node_id : v -> [1..N]
+        size_t node_id(size_t v) const{
+            return m_bp_support.rank(v);
+        }
+
+        // Get edge label leading to node v with node_id(v) = v_id
+        /*t_edge_label edge(size_t v_id) const{
+            size_t begin = m_start_sel(v_id) + 1 - v_id;
+            size_t end   = m_start_sel(v_id+1) + 1 - (v_id+1);
+            return t_edge_label(&m_labels, begin, end);
+        }*/
+
+        // Check if v is a leaf
+        size_t is_leaf(size_t v) const {
+            return m_bp[v+1] == 0;
+        }
+
+        // Check if v is the root node
+        size_t is_root(size_t v) const {
+            return v == 0;
+        }
+
+        // Return parent of v
+        size_t parent(size_t v) const {
+            return m_bp_support.enclose(v);
         }
         
     };
