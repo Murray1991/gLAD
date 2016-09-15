@@ -18,6 +18,7 @@ namespace glad {
     typedef std::tuple<uint64_t, uint64_t, char>        tTUUC;
     typedef std::pair<std::string, uint64_t>            tPSU;
     typedef std::vector<tPSU>                           tVPSU;
+    typedef std::array<size_t,2>                        t_range;
     
     template<typename t_bv = sdsl::sd_vector<>,
          typename t_sel= typename t_bv::select_1_type,
@@ -43,6 +44,8 @@ namespace glad {
         t_sel               m_start_sel;
         t_bp_rnk10          m_bp_rnk10;
         t_bp_sel10          m_bp_sel10;
+        
+        t_rmq               m_rmq;
         
     private:
         
@@ -90,8 +93,10 @@ namespace glad {
                 n += it->first.size();
                 max_weight = max_weight > it->second ? max_weight : it->second;
             }
-            //m_weight = t_weight (N, 0, bits::hi(max_weight)+1);
-            //for ( size_t i = 0; i < N ; m_weight[i] = string_weight[i++].second );
+            m_weight = t_weight (N, 0, bits::hi(max_weight)+1);
+            for ( size_t i = 0; i < N ; i++ )
+                m_weight[i] = string_weight[i].second;
+            m_rmq = t_rmq(&m_weight);
             build_tst_bp(string_weight, N, n, max_weight);
         }
 
@@ -115,7 +120,7 @@ namespace glad {
             helper_it   = m_helper.begin();
 
             *(start_it++) = 1;
-            tnode * root  = build_tst(string_weight, 0, N-1, 0, 0);
+            tnode * root  = build_tst(string_weight, 0, N-1, 0, 0, 1);
             delete root;
             
             m_bp.resize(bp_it-m_bp.begin()); 
@@ -129,20 +134,15 @@ namespace glad {
             m_bp_rnk10   = t_bp_rnk10(&m_bp);
             m_bp_sel10   = t_bp_sel10(&m_bp);
             
-            num_leaves = count_leaves(root);
-            cout << "leaves: " << num_leaves << " ; strings: " << N << endl;
-            lookup_test(string_weight);
+            assert(count_leaves() == N);
         }
         
-        tnode *build_tst(const tVPSU& string_weight, int64_t first, int64_t last, int64_t index, int64_t level) {
-            
-            constexpr int64_t target_level = 1;
-            
+        tnode *build_tst(const tVPSU& string_weight, int64_t first, int64_t last, int64_t index, int64_t level, int help) {
             if ( first > last || ( first == last && string_weight[first].first.length() == index ) )
                 return nullptr;
             
-            char ch;
-            uint64_t sx, dx;
+            constexpr int64_t target_level = 1;
+            uint64_t sx, dx; char ch;
             std::tie(sx, dx, ch) = partitionate(string_weight, first, last, index);
             sdsl::bit_vector::iterator it;
             
@@ -151,53 +151,46 @@ namespace glad {
                 start_it++;
                 *(label_it++) = ch; 
                 *(start_it++) = 1;
-                it = helper_it++;
+                *(helper_it++) = help;
             }
             
             tnode *node = new tnode(ch);
-            node->lonode = build_tst(string_weight, first, sx-1, index, level+1);
+            node->lonode = build_tst(string_weight, first, sx-1, index, level+1, 0);
             if ( level == target_level - 1 ) {
                 delete node->lonode;
                 node->lonode = nullptr;
             }
-            
-            node->eqnode = build_tst(string_weight, sx, dx, index+1, level+1);
+            node->eqnode = build_tst(string_weight, sx, dx, index+1, level+1, 1);
             if ( level == target_level - 1 ) {
                 delete node->eqnode;
                 node->eqnode = nullptr;
             }
-            
-            node->hinode = build_tst(string_weight, dx+1, last, index, level+1);
+            node->hinode = build_tst(string_weight, dx+1, last, index, level+1, 0);
             if ( level < target_level ) {
                 bp_it++;
-                *it = (node->hinode != nullptr);
                 if ( level == target_level-1 ) {
                     delete node->hinode;
                     node->hinode = nullptr;
                 }
             }
-            
             if ( level == target_level ) {
                 compress(node);
-                mark(node);
+                mark(node, help);
             }
-            
             return node;
         }
         
-        void mark(tnode * node) {
-            
+        void mark(tnode * node, int help) {
             if ( node == nullptr )
                 return;
             
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
-            *(helper_it++) = (node->hinode != nullptr);
+            *(helper_it++) = help;
             *(start_it++) = 1;
             *(bp_it++) = 1;
-            mark(node->lonode);
-            mark(node->eqnode);
-            mark(node->hinode);
-            
+            mark(node->lonode, 0);
+            mark(node->eqnode, 1);
+            mark(node->hinode, 0);
             bp_it++;
         }
         
@@ -207,7 +200,6 @@ namespace glad {
         }
         
         void compress (tnode * node) {
-            
             if ( node == nullptr )
                 return;
             
@@ -220,21 +212,20 @@ namespace glad {
                 next->eqnode = nullptr;
                 clear(next);
             }
-            
             if ( !node->lonode && !node->eqnode && node->is_end() && node->hinode ) {
                 /* in this case node->hinode is not compressed yet -> rotation! */
                 int len = node->label.length();
-                char lchar = node->label.at(len-1);
-                node->lonode = new tnode(lchar);
+                char& lchar = node->label.at(len-1);
+                assert(lchar == EOS);
+                node->lonode = new tnode(lchar); //EOS
                 tnode *tmp = node->hinode;
-                node->label[len-1] = tmp->label.at(0);
+                lchar = tmp->label.at(0);
                 node->eqnode = tmp->eqnode;
-                node->hinode = nullptr;
                 tmp->eqnode = nullptr;
+                node->hinode = nullptr;
                 assert(!tmp->lonode & !tmp->eqnode && !tmp->hinode); //by construction
                 delete tmp;
             }
-            
             compress(node->lonode);
             compress(node->eqnode);
             compress(node->hinode);
@@ -252,129 +243,155 @@ namespace glad {
         
     public:    
         size_t get_nodes() {
-            return num_nodes;
+            return count_nodes();
         }
         
         size_t get_size() {
-            return num_nodes*sizeof(tnode);
+            return 0;
+        }
+        
+        inline bool lookup(const string& prefix) const {
+            return search(prefix) > 0;
+        }
+        
+        tVPSU top_k(const std::string& prefix, size_t k) const{
+            auto range = prefix_range(prefix);
+            auto top_idx = heaviest_indexes(range, k);
+            tVPSU result_list;
+            for (auto idx : top_idx){
+                auto str = build_string(idx);
+                result_list.push_back(tPSU(str, m_weight[idx]));
+            }
+            return result_list;
         }
         
     private:
         
-        inline int eat(const string& a, const string& b) const {
-            auto ita = a.begin();
-            auto itb = b.begin();
-            for ( ; ita != a.end() && itb != b.end()-1 && *ita == *itb ; ita++, itb++ );
-            return (ita-a.begin());
+        inline int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
+            size_t cv = v+1;
+            for ( bool b = false, h = false; m_bp[cv] ; b = h ) {
+                /* "eqnode" is always present, when it is encountered b == true */
+                h = m_helper[node_id(cv)-1];
+                if ( (!b && !h && ch1 < ch2) || (h && ch1 == ch2) || (b && !h && ch1 > ch2)) {
+                    return cv;
+                }
+                cv = m_bp_support.find_close(cv)+1;
+            }
+            if ( cv == v+1 && ch1 == ch2 ) {
+                return v;
+            }
+            return -1;
         }
         
-        int64_t map_to_edge(size_t v, char ch1, char ch2) {
-            // TODO reimplement for efficiency reasons
-            // m_helper[a_id] = 1 iff node with id==a_id has ( lo,eq,hi || !lo, eq, hi )
-            // m_helper[a_id] = 0 iff node with id==a_id has ( lo,eq,!hi || !lo, eq, !hi )
-            // TODO orcaputt che casino -> migliorare
-            auto n = children(v);
-            auto k = n.size();
-            // TODO mah, forse meglio aggiungere un bit a m_helper ? piu' pulito?
-            auto h = m_helper[node_id(v)-1];
-            /*
-            cout << "ch1: " << ch1 << " ~ ch2: " << ch2 << " ~ h: " << h << " ~ k: " << k << " ~ node_id: " << node_id(v) << " ~ ch1 < ch2: " << ((uint8_t) ch1<(uint8_t) ch2) << endl;
-            for ( auto it=n.begin() ; it != n.end() ; it++ )
-                    cout << *it << " (" << get_label(*it) << ") , ";
-            cout << endl;
-            */
+        std::vector<size_t> heaviest_indexes( t_range range, size_t k ) const {
+            typedef std::tuple<t_range, size_t, size_t> t_q;
+            auto cmp = [](const t_q& a, const t_q& b) { 
+                return get<2>(a) < get<2>(b); 
+            };
             
-            if ( k && (uint8_t) ch1 > (uint8_t) ch2 && h==1 )
-                return n[1 + (k==3)];
-            if ( k && (uint8_t) ch1 < (uint8_t) ch2 && ( (h==1 && k==3) || (h==0 && k > 1) ) )
-                return n[0];
-            if ( k && ch1 == ch2 )
-                return n[0 + (k==3 || (k==2 && h==0))];
-            if ( !k && ch1!=ch2 )
-                return -2;
-            if ( !k && ch1==ch2 )
-                return -1;
-            
-            return -2;
+            std::vector<size_t> indexes;
+            std::priority_queue<t_q, std::vector<t_q>, decltype(cmp)> q(cmp);
+            auto index = m_rmq(range[0], range[1]);
+            q.push(make_tuple(range, index, m_weight[index]));
+            while ( indexes.size() < k && !q.empty() ) {
+                auto t = q.top();
+                auto r = get<0>(t);
+                auto i = get<1>(t);
+                auto w = get<2>(t);
+                //TODO limit the queue size too
+                if ( r[0] < i ) {
+                    auto idx = m_rmq(r[0],i-1);
+                    q.push(make_tuple((t_range){{r[0],i-1}}, idx, m_weight[idx]));
+                }
+                if ( r[1] > i ) {
+                    auto idx = m_rmq(i+1,r[1]);
+                    q.push(make_tuple((t_range){{i+1,r[1]}}, idx, m_weight[idx])); 
+                }
+                indexes.push_back(i);
+                q.pop();
+            }
+            return indexes;
+        }
+        
+        inline std::string build_string(size_t idx) const {
+            std::string str = "";
+            size_t v = m_bp_sel10(idx+1)-1;
+            for ( bool b = true; v != 0 ; ) {
+                auto lab = get_label(v);
+                if ( !b && lab.size() > 1 ) {
+                    lab.pop_back();
+                    str = lab + str;
+                }
+                if ( b ) 
+                    str = lab + str;
+                b = m_helper[node_id(v)-1];
+                v = parent(v);
+            }
+            return str;
+        }
+        
+        t_range prefix_range(const std::string& prefix) const {
+            auto v = search(prefix);
+            if ( v < 0 )
+                return {{0,0}};
+            return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
         // lookup for scnt repr
-        bool lookup(const string& prefix) {
+        inline int64_t search(const string& prefix) const {
             int64_t v = 0, i = 0;
             for ( string lab = get_label(v); ; lab = get_label(v) ) {
                 auto plen = prefix.length()-i;
                 auto llen = lab.length();
-                auto len = plen < llen ? plen : llen-1;
-                auto b = !prefix.compare(i, len, lab, 0, len);
-                if ( plen < llen )
-                    return b;
-                //useless if blind search
-                if ( len > 0 && !b )
-                    return false;
-                i += len;
-                v = map_to_edge(v, prefix.at(i), lab.back());
-                if ( v < 0 ) break;
-                i += (prefix.at(i) == lab.back());
-            }
-            return v == -1;
-        }
-        
-        void lookup_test(tVPSU& string_weight) {
-            constexpr int levels = 1;
-            for (auto it = string_weight.begin(); it != string_weight.begin() + 2000; it++ ) {
-                for ( int i = 0; i < levels; i++ ) {
-                    if ( it->first.size() > i ) {
-                        if ( ! lookup(it->first.substr(0, it->first.size()-i) ) ) {
-                            cerr << "error for " << it->first.substr(0, it->first.size()-i) << " , index: " << it - string_weight.begin() << endl;
-                            exit(EXIT_FAILURE);
-                        }
-                    }
+                if ( plen < llen ) {
+                    return ( !prefix.compare(i, plen, lab, 0, plen) ? v : -1 );
                 }
+                //useless if blind search
+                if ( llen > 1 && prefix.compare(i, llen-1, lab, 0, llen-1) != 0)
+                    return -1;
+                //there is always a character
+                i += llen-1;
+                v = map_to_edge(v, prefix.at(i), lab.back());
+                //cout << "v = " << v << endl << endl;
+                i += (prefix.at(i) == lab.back());
+                if ( i == prefix.length() )
+                    break;
             }
-            cout << "all correct!\n";
+            return v;
         }
         
-        size_t num_nodes = 0;
-        size_t num_leaves = 0;
-        
-        size_t count_leaves(tnode *node) {
+        size_t count_leaves() {
             return m_bp_rnk10(m_bp_support.find_close(0)+1);
         }
         
-        size_t count_nodes(tnode *node) {
-            if ( node == nullptr )
-                return 0;
-            return 1 + count_nodes(node->lonode) + count_nodes(node->eqnode) + count_nodes(node->hinode); 
+        size_t count_nodes() {
+            return (m_bp.size()/2 + 1);
         }
         
-        // Map node v to its unique identifier. node_id : v -> [1..N]
-        size_t node_id(size_t v) const{
+        inline size_t node_id(size_t v) const{
             return m_bp_support.rank(v);
         }
         
-        std::string get_label(size_t v) {
+        inline std::string get_label(size_t v) const {
             size_t i = m_start_sel(node_id(v)) + 1 - node_id(v);
             size_t o = m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
+            //TODO here string is copied, it's possible to optimize...
             std::string s((char *) m_label.data(), i, o-i);
-            return s;
+            return std::move(s);
         }
 
-        // Check if v is a leaf
-        size_t is_leaf(size_t v) const {
+        inline size_t is_leaf(size_t v) const {
             return m_bp[v+1] == 0;
         }
 
-        // Check if v is the root node
-        size_t is_root(size_t v) const {
+        inline size_t is_root(size_t v) const {
             return v == 0;
         }
 
-        // Return parent of v
-        size_t parent(size_t v) const {
+        inline size_t parent(size_t v) const {
             return m_bp_support.enclose(v);
         }
         
-        // Return all children of v
         std::vector<size_t> children(size_t v) const {
             std::vector<size_t> res;
             size_t cv = v+1;
@@ -384,6 +401,5 @@ namespace glad {
             }
             return res;
         }
-        
     };
 }
