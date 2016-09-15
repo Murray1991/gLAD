@@ -292,7 +292,8 @@ namespace glad {
             std::vector<size_t> indexes;
             std::priority_queue<t_q, std::vector<t_q>, decltype(cmp)> q(cmp);
             auto index = m_rmq(range[0], range[1]);
-            q.push(make_tuple(range, index, m_weight[index]));
+            if ( range[0] != 0 || range[1] != 0 )
+                q.push(make_tuple(range, index, m_weight[index]));
             while ( indexes.size() < k && !q.empty() ) {
                 auto t = q.top();
                 auto r = get<0>(t);
@@ -354,7 +355,7 @@ namespace glad {
                 v = map_to_edge(v, prefix.at(i), lab.back());
                 //cout << "v = " << v << endl << endl;
                 i += (prefix.at(i) == lab.back());
-                if ( i == prefix.length() )
+                if ( i == prefix.length() || v < 0 )
                     break;
             }
             return v;
