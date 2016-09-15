@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <algorithm>
+#include <utility>
 #include <tuple>
 #include <cassert>
 #include <sdsl/bit_vectors.hpp>
@@ -120,7 +121,9 @@ namespace glad {
             helper_it   = m_helper.begin();
 
             *(start_it++) = 1;
+            cout << "start: build tst...\n";
             tnode * root  = build_tst(string_weight, 0, N-1, 0, 0, 1);
+            cout << "end: build tst...\n";
             delete root;
             
             m_bp.resize(bp_it-m_bp.begin()); 
@@ -141,7 +144,7 @@ namespace glad {
             if ( first > last || ( first == last && string_weight[first].first.length() == index ) )
                 return nullptr;
             
-            constexpr int64_t target_level = 1;
+            constexpr int64_t target_level = 3;
             uint64_t sx, dx; char ch;
             std::tie(sx, dx, ch) = partitionate(string_weight, first, last, index);
             sdsl::bit_vector::iterator it;
@@ -247,16 +250,29 @@ namespace glad {
         }
         
         size_t get_size() {
-            return 0;
+            size_t size = size_in_bytes(m_label) +
+                size_in_bytes(m_bp) +
+                size_in_bytes(m_bp_support) +
+                size_in_bytes(m_bp_rnk10) +
+                size_in_bytes(m_bp_sel10) +
+                size_in_bytes(m_start_bv) +
+                size_in_bytes(m_start_sel) +
+                size_in_bytes(m_weight) +
+                size_in_bytes(m_rmq) +
+                size_in_bytes(m_helper);
+            return size;
         }
         
-        inline bool lookup(const string& prefix) const {
+        bool lookup(string prefix) const {
+            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             return search(prefix) > 0;
         }
         
-        tVPSU top_k(const std::string& prefix, size_t k) const{
+        tVPSU top_k(std::string prefix, size_t k) const{
+            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             auto range = prefix_range(prefix);
             auto top_idx = heaviest_indexes(range, k);
+            //auto top_idx = first_indexes(range, k);
             tVPSU result_list;
             for (auto idx : top_idx){
                 auto str = build_string(idx);
@@ -283,7 +299,7 @@ namespace glad {
             return -1;
         }
         
-        std::vector<size_t> heaviest_indexes( t_range range, size_t k ) const {
+        std::vector<size_t> heaviest_indexes( t_range& range, size_t k ) const {
             typedef std::tuple<t_range, size_t, size_t> t_q;
             auto cmp = [](const t_q& a, const t_q& b) { 
                 return get<2>(a) < get<2>(b); 
@@ -294,9 +310,11 @@ namespace glad {
             auto index = m_rmq(range[0], range[1]);
             if ( range[0] != 0 || range[1] != 0 )
                 q.push(make_tuple(range, index, m_weight[index]));
+            t_range r;
+            t_q t;
             while ( indexes.size() < k && !q.empty() ) {
-                auto t = q.top();
-                auto r = get<0>(t);
+                t = q.top();
+                r = get<0>(t);
                 auto i = get<1>(t);
                 auto w = get<2>(t);
                 //TODO limit the queue size too
@@ -314,17 +332,25 @@ namespace glad {
             return indexes;
         }
         
-        inline std::string build_string(size_t idx) const {
+        std::string build_string(size_t idx) const {
+            const char * data = (const char *) m_label.data();
             std::string str = "";
             size_t v = m_bp_sel10(idx+1)-1;
+            size_t i, o;
+            std::string lab;
             for ( bool b = true; v != 0 ; ) {
-                auto lab = get_label(v);
-                if ( !b && lab.size() > 1 ) {
-                    lab.pop_back();
-                    str = lab + str;
+                i = get_start_label(v);
+                o = get_end_label(v);
+                if ( !b && o-i > 1 ) {
+                    //TODO smarter way?
+                    lab.assign(data+i, o-i-1);
+                    str = std::move(lab) + str;
                 }
-                if ( b ) 
-                    str = lab + str;
+                if ( b ) {
+                    //TODO smarter way?
+                    lab.assign(data+i, o-i);
+                    str = std::move(lab) + str;
+                }
                 b = m_helper[node_id(v)-1];
                 v = parent(v);
             }
@@ -332,31 +358,30 @@ namespace glad {
         }
         
         t_range prefix_range(const std::string& prefix) const {
-            auto v = search(prefix);
-            if ( v < 0 )
-                return {{0,0}};
+            int64_t v = search(prefix);
+            if ( v < 0 ) return {{0,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
         // lookup for scnt repr
-        inline int64_t search(const string& prefix) const {
+        int64_t search(const string& prefix) const {
             int64_t v = 0, i = 0;
-            for ( string lab = get_label(v); ; lab = get_label(v) ) {
-                auto plen = prefix.length()-i;
-                auto llen = lab.length();
+            const char * data = (const char *) m_label.data();
+            const size_t pref_len = prefix.size();
+            size_t plen, start, end, llen;
+            while ( i != pref_len && v >= 0 ) {
+                plen = pref_len-i;
+                start = get_start_label(v);
+                end = get_end_label(v);
+                llen = end-start;
                 if ( plen < llen ) {
-                    return ( !prefix.compare(i, plen, lab, 0, plen) ? v : -1 );
+                    return ( !prefix.compare(i, plen, data+start, plen) ? v : -1 );
                 }
-                //useless if blind search
-                if ( llen > 1 && prefix.compare(i, llen-1, lab, 0, llen-1) != 0)
+                if ( llen > 1 && prefix.compare(i, llen-1, data+start, llen-1) != 0)
                     return -1;
-                //there is always a character
                 i += llen-1;
-                v = map_to_edge(v, prefix.at(i), lab.back());
-                //cout << "v = " << v << endl << endl;
-                i += (prefix.at(i) == lab.back());
-                if ( i == prefix.length() || v < 0 )
-                    break;
+                v = map_to_edge(v, prefix.at(i), data[end-1]);
+                i += (prefix.at(i) == data[end-1]);
             }
             return v;
         }
@@ -373,14 +398,14 @@ namespace glad {
             return m_bp_support.rank(v);
         }
         
-        inline std::string get_label(size_t v) const {
-            size_t i = m_start_sel(node_id(v)) + 1 - node_id(v);
-            size_t o = m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
-            //TODO here string is copied, it's possible to optimize...
-            std::string s((char *) m_label.data(), i, o-i);
-            return std::move(s);
+        inline size_t get_start_label(size_t v) const {
+            return m_start_sel(node_id(v)) + 1 - node_id(v);
         }
-
+        
+        inline size_t get_end_label(size_t v) const {
+            return m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
+        }
+        
         inline size_t is_leaf(size_t v) const {
             return m_bp[v+1] == 0;
         }
@@ -393,14 +418,39 @@ namespace glad {
             return m_bp_support.enclose(v);
         }
         
-        std::vector<size_t> children(size_t v) const {
-            std::vector<size_t> res;
-            size_t cv = v+1;
-            while ( m_bp[cv] ) {
-                res.push_back(cv);
-                cv = m_bp_support.find_close(cv) + 1;
-            }
-            return res;
+    public:
+        
+        typedef size_t size_type;
+        
+        size_type serialize(std::ostream& out, sdsl::structure_tree_node* v=nullptr, std::string name="") const {
+            using namespace sdsl;
+            auto child = structure_tree::add_child(v, name, util::class_name(*this));
+            size_type written_bytes = 0;
+            written_bytes += m_label.serialize(out, child, "labels");
+            written_bytes += m_bp.serialize(out, child, "bp");
+            written_bytes += m_bp_support.serialize(out, child, "bp_support");
+            written_bytes += m_bp_rnk10.serialize(out, child, "bp_rnk10");
+            written_bytes += m_bp_sel10.serialize(out, child, "bp_sel10");
+            written_bytes += m_start_bv.serialize(out, child, "start_bv");
+            written_bytes += m_start_sel.serialize(out, child, "start_sel");
+            written_bytes += m_weight.serialize(out, child, "weight");
+            written_bytes += m_rmq.serialize(out, child, "rmq");
+            written_bytes += m_helper.serialize(out, child, "helper");
+            structure_tree::add_size(child, written_bytes);
+            return written_bytes;
+        }
+
+        void load(std::istream& in) {
+            m_label.load(in);
+            m_bp.load(in);
+            m_bp_support.load(in, &m_bp);
+            m_bp_rnk10.load(in, &m_bp);
+            m_bp_sel10.load(in, &m_bp);
+            m_start_bv.load(in);
+            m_start_sel.load(in,&m_start_bv);
+            m_weight.load(in);
+            m_rmq.load(in);
+            m_helper.load(in);
         }
     };
 }
