@@ -16,10 +16,28 @@ std::ifstream::pos_type filesize(const string& file) {
     return in.tellg(); 
 }
 
+void query_from_input(glad::tst<>& t) {
+    cout << "Please enter queries line by line." << endl;
+    cout << "Pressing Crtl-D will quit the program." << endl;
+    string prefix;
+    while ( getline(cin, prefix) ) {
+        auto query_start = chrono::high_resolution_clock::now(); 
+        auto result_list = t.top_k(prefix, 5);
+        auto query_time  = chrono::high_resolution_clock::now() - query_start;
+        auto query_us    = chrono::duration_cast<chrono::microseconds>(query_time).count();
+        cout << "-- top results:" << endl;
+        for (size_t i=0; i<result_list.size(); ++i) {
+            cout << result_list[i].first << "  " << result_list[i].second << endl;
+        }
+        cout << "-- (" << std::setprecision(3) << query_us / 1000.0;
+        cout << " ms)" << endl;
+    }
+}
+
 int main(int argc, char *argv[]) {
     
     if ( argc < 2 ) {
-        cerr << "Pirla, serve il nome del file\n";
+        cerr << "Error: Insert filename\n";
         return 1;
     }
     srand(time(0));
@@ -38,14 +56,14 @@ int main(int argc, char *argv[]) {
         cout << "stored!\n";
         load_from_file(t, index_file);
     }*/
-    cout << "loaded!\n";
+    //cout << "loaded!\n";
     auto t2 = std::chrono::high_resolution_clock::now();
     
     cout << "init: " << (duration_cast<duration<double>>(t2-t1)).count() << "sec\n" << \
             "nodes: " << t.get_nodes() << "\n" << \
             "space (MB): " << t.get_size()/1000000 << endl;
     
-    //query_from_input(t);
-            
+    query_from_input(t);
+    
     return 0;
 }
