@@ -1,4 +1,0 @@
-PROG = nc
-MODULE_CFLAGS=-DMG_ENABLE_THREADS -DMG_DISABLE_HTTP
-SSL_LIB=openssl
-include ../examples.mk
