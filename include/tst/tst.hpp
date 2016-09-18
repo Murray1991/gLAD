@@ -16,9 +16,14 @@ namespace glad {
  
     #define EOS ((char) 3)
     
-    typedef std::tuple<uint64_t, uint64_t, char>        tTUUC;
-    typedef std::pair<std::string, uint64_t>            tPSU;
+    typedef uint32_t                                    uint_t;
+    typedef int                                         int_t;
+    typedef std::tuple<uint_t, uint_t, char>            tTUUC;
+    typedef std::pair<std::string, uint_t>              tPSU;
     typedef std::vector<tPSU>                           tVPSU;
+    typedef tPSU *                                      tPSU2;
+    typedef std::vector<tPSU2>                          tVPSU2;
+    typedef std::vector<std::string *>                  tVS;
     typedef std::array<size_t,2>                        t_range;
     
     template<typename t_bv = sdsl::sd_vector<>,
@@ -50,33 +55,57 @@ namespace glad {
         
     private:
         
-        void process_input(const std::string& filename, tVPSU& string_weight) const{
-            std::ifstream in(filename);
-            if ( !in ) {
-                cerr << "Error: Could not open file " << filename << endl;
-                exit(EXIT_FAILURE);
-            }
-            std::string entry;
-            while ( std::getline(in, entry, '\t')) {
-                std::transform(entry.begin(), entry.end(), entry.begin(), ::tolower);
-                std::string s_weight;
-                std::getline(in, s_weight);
-                uint64_t weight = stoull(s_weight);
-                string_weight.emplace_back(entry + EOS, weight);
-            }
-            std::sort(string_weight.begin(), string_weight.end(), [](const tPSU& a, const tPSU& b) {
-                return a.first.compare(b.first) < 0;
+        void sort_unique(tVPSU2& string_weight) {
+            cout << "sort strings\n";
+            std::sort(string_weight.begin(), string_weight.end(), [](const tPSU2& a, const tPSU2& b) {
+                return a->first.compare(b->first) < 0;
             });
-            auto unique_end = std::unique(string_weight.begin(), string_weight.end(), [](tPSU& a, tPSU& b) {
-                if ( a.first.size() != b.first.size() )
+            cout << "end sort strings\n";
+            cout << "unique strings; from: " << string_weight.size() << endl;
+            size_t count = 0;
+            auto unique_end = std::unique(string_weight.begin(), string_weight.end(), [&](tPSU2& first, tPSU2& last) {
+                //last.first => mind blown!
+                if ( first->first.size() != last->first.size() )
                     return false;
-                if ( a.first.compare(b.first) == 0 ) {
-                    a.second += b.second;
+                if ( first->first.compare(last->first) == 0 ) {
+                    //keep the higher weight, is it really necessary? maybe better a sum?
+                    first->second = first->second > last->second ? first->second : last->second; 
+                    last->second = first->second > last->second ? first->second : last->second;
+                    count++;
                     return true;
                 }
                 return false;
             });
-            string_weight.resize(unique_end-string_weight.begin());
+            /*
+            for ( tVPSU2::iterator it = unique_end; it != string_weight.end(); it++ )
+                delete *it; */
+            string_weight.resize(unique_end - string_weight.begin());
+            string_weight.shrink_to_fit();
+            cout << "end unique strings; deleted: " << count << endl;
+        }
+        
+        void process_input(const std::string& filename, tVPSU2& string_weight) {
+            cout << "process input...\n";
+            std::ifstream in(filename);
+            if ( !in ) {
+                std::cerr << "Error: Could not open file " << filename << endl;
+                exit(EXIT_FAILURE);
+            }
+            std::string entry;
+            try {
+                while ( std::getline(in, entry, '\t')) {
+                    std::transform(entry.begin(), entry.end(), entry.begin(), ::tolower);
+                    std::string s_weight;
+                    std::getline(in, s_weight);
+                    uint_t weight = stoull(s_weight);
+                    string_weight.push_back(new tPSU( entry+EOS, weight ));
+                }
+            } catch ( std::bad_alloc& e ) {
+                std::cerr << "Error: std::bad_alloc when filling from file..." << endl;
+                std::exit(EXIT_FAILURE);
+            }
+            in.close();
+            cout << "end process input...\n";
         }
         
     public:
@@ -86,19 +115,28 @@ namespace glad {
         ~tst() {}
         
         tst(const std::string& filename) {
-            uint64_t n = 0, N = 0, max_weight = 0;
-            tVPSU string_weight;
-            process_input(filename, string_weight);
+            uint_t n = 0, N = 0, max_weight = 0;
+            tVPSU2 string_weight;
+            process_input(filename,string_weight);
+            sort_unique(string_weight);
             for ( auto it = string_weight.begin() ; it != string_weight.end(); it++ ) {
                 N += 1;
-                n += it->first.size();
-                max_weight = max_weight > it->second ? max_weight : it->second;
+                n += (*it)->first.size();
+                max_weight = max_weight > (*it)->second ? max_weight : (*it)->second;
             }
             m_weight = t_weight (N, 0, bits::hi(max_weight)+1);
-            for ( size_t i = 0; i < N ; i++ )
-                m_weight[i] = string_weight[i].second;
-            m_rmq = t_rmq(&m_weight);
+            for ( size_t i = 0; i < N ; i++ ) {
+                m_weight[i] = string_weight[i]->second;
+            }
+
+            cout << "number of: " << N << endl;
             build_tst_bp(string_weight, N, n, max_weight);
+            
+            m_rmq = t_rmq(&m_weight);
+            
+            cout << count_leaves() << endl;
+            cout << N << endl;
+            assert(count_leaves() == N);
         }
 
     private:
@@ -108,7 +146,7 @@ namespace glad {
         sdsl::bit_vector::iterator helper_it;
         sdsl::int_vector<8>::iterator label_it;
         
-        void build_tst_bp(tVPSU& string_weight, uint64_t N, uint64_t n, uint64_t max_weight) {
+        void build_tst_bp(tVPSU2& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
             //TODO check the initialization values...
             t_bv_uc start_bv(2*N+n+2, 0);
             m_label     = t_label(n);
@@ -121,9 +159,9 @@ namespace glad {
             helper_it   = m_helper.begin();
 
             *(start_it++) = 1;
-            cout << "start: build tst...\n";
-            tnode * root  = build_tst(string_weight, 0, N-1, 0, 0, 1);
-            cout << "end: build tst...\n";
+            std::cout << "start: build tst...\n";
+            tnode * root  = build_tst(strings);
+            std::cout << "end: build tst...\n";
             delete root;
             
             m_bp.resize(bp_it-m_bp.begin()); 
@@ -137,53 +175,85 @@ namespace glad {
             m_bp_rnk10   = t_bp_rnk10(&m_bp);
             m_bp_sel10   = t_bp_sel10(&m_bp);
             
-            assert(count_leaves() == N);
         }
         
-        tnode *build_tst(const tVPSU& string_weight, int64_t first, int64_t last, int64_t index, int64_t level, int help) {
-            if ( first > last || ( first == last && string_weight[first].first.length() == index ) )
-                return nullptr;
+        tnode *build_tst (tVPSU2& strings) 
+        {
+            typedef std::tuple<int_t, int_t, int_t, int_t, bool, tnode *, bool> call_t;
+            constexpr int_t target_level = 5; // >= 1 , with an higher number should be more efficient in memory consumption?s
             
-            constexpr int64_t target_level = 3;
-            uint64_t sx, dx; char ch;
-            std::tie(sx, dx, ch) = partitionate(string_weight, first, last, index);
-            sdsl::bit_vector::iterator it;
+            std::stack<call_t> stk;
+            int_t sx, dx; char ch;
+            tnode * root = new tnode(), * node;
+            int_t first, last, index, level; bool help, marked;
             
-            if ( level < target_level ) {
-                *(bp_it++) = 1;
-                start_it++;
-                *(label_it++) = ch; 
-                *(start_it++) = 1;
-                *(helper_it++) = help;
-            }
-            
-            tnode *node = new tnode(ch);
-            node->lonode = build_tst(string_weight, first, sx-1, index, level+1, 0);
-            if ( level == target_level - 1 ) {
-                delete node->lonode;
-                node->lonode = nullptr;
-            }
-            node->eqnode = build_tst(string_weight, sx, dx, index+1, level+1, 1);
-            if ( level == target_level - 1 ) {
-                delete node->eqnode;
-                node->eqnode = nullptr;
-            }
-            node->hinode = build_tst(string_weight, dx+1, last, index, level+1, 0);
-            if ( level < target_level ) {
-                bp_it++;
-                if ( level == target_level-1 ) {
-                    delete node->hinode;
-                    node->hinode = nullptr;
+            stk.emplace(0, strings.size()-1, 0, 0, 1, root, 0 <= target_level);
+            while ( ! stk.empty() ) {
+                
+                std::tie(first, last, index, level, help, node, marked) = stk.top();
+                
+                if ( !marked )
+                    stk.pop();  // pointers have not destructors, it's safe to call
+                
+                if ( marked && !node->is_leaf() ) {
+                    stk.pop();
+                    if ( level < target_level )
+                        bp_it++;
+                    if ( level == target_level ) {
+                        compress(node);
+                        mark(node, help);
+                        delete node->hinode;
+                        delete node->eqnode;
+                        delete node->lonode;
+                        node->hinode = node->eqnode = node->lonode = nullptr;
+                    }
+                    continue;
+                }
+                
+                //cout << "[" << first << "," << last << "]" << ". partitionate " << index << " " << strings[first]->first.size() << endl;
+                std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
+                node->label = ch;
+                
+                if ( level < target_level ) {
+                    start_it++;
+                    *(bp_it++) = 1;
+                    *(start_it++) = 1;
+                    *(label_it++) = ch; 
+                    *(helper_it++) = help;
+                }
+                
+                if ( dx < last && !node->hinode ) {
+                    node->hinode = new tnode();
+                    stk.emplace(dx+1, last, index, level+1, 0, node->hinode, level+1 <= target_level);     //hinode
+                }
+                if ( sx <= dx && !node->eqnode ) {
+                    if ( sx < dx || (sx == dx && ch != EOS)) {
+                        node->eqnode = new tnode();
+                        stk.emplace(sx, dx, index+1, level+1, 1, node->eqnode, level+1 <= target_level);       //eqnode
+                    }
+                    if (sx == dx && ch == EOS) {
+                        if ( marked ) {
+                            if ( level < target_level )
+                                bp_it++;
+                            else {
+                                mark(node,help);
+                            }
+                            stk.pop();
+                        }
+                        //cout << sx << ". deleted" << endl;
+                        delete strings[sx];
+                        strings[sx] = nullptr;
+                    }
+                }
+                if ( first < sx && !node->lonode ) {
+                    node->lonode = new tnode();
+                    stk.emplace(first, sx-1, index, level+1, 0, node->lonode, level+1 <= target_level);    //lonode
                 }
             }
-            if ( level == target_level ) {
-                compress(node);
-                mark(node, help);
-            }
-            return node;
+            return root;
         }
         
-        void mark(tnode * node, int help) {
+        void mark(tnode * node, bool help) {
             if ( node == nullptr )
                 return;
             
@@ -235,12 +305,12 @@ namespace glad {
         }
         
         /* fa veramente schifo */
-        tTUUC partitionate(const tVPSU& string_weight, uint64_t first, uint64_t last, uint64_t index) {
+        tTUUC partitionate(const tVPSU2& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
-            char ch = string_weight[m].first.at(index);
-            for ( sx = first; sx < last && string_weight[sx].first.size() > index && string_weight[sx].first.at(index) != ch; sx++ );
-            for ( dx = last; dx > first && string_weight[dx].first.size() > index && string_weight[dx].first.at(index) != ch; dx-- );
+            char ch = strings[m]->first.at(index);
+            for ( sx = first; sx < last && strings[sx]->first.size() > index && strings[sx]->first.at(index) != ch; sx++ );
+            for ( dx = last; dx > first && strings[dx]->first.size() > index && strings[dx]->first.at(index) != ch; dx-- );
             return make_tuple(sx,dx,ch);
         }
         
@@ -272,7 +342,6 @@ namespace glad {
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             auto range = prefix_range(prefix);
             auto top_idx = heaviest_indexes(range, k);
-            //auto top_idx = first_indexes(range, k);
             tVPSU result_list;
             for (auto idx : top_idx){
                 auto str = build_string(idx);
@@ -286,7 +355,7 @@ namespace glad {
         inline int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
             size_t cv = v+1;
             for ( bool b = false, h = false; m_bp[cv] ; b = h ) {
-                /* "eqnode" is always present, when it is encountered b == true */
+                // "eqnode" is always present for internal nodes: h == true => b = true;
                 h = m_helper[node_id(cv)-1];
                 if ( (!b && !h && ch1 < ch2) || (h && ch1 == ch2) || (b && !h && ch1 > ch2)) {
                     return cv;
@@ -304,27 +373,27 @@ namespace glad {
             auto cmp = [](const t_q& a, const t_q& b) { 
                 return get<2>(a) < get<2>(b); 
             };
-            
             std::vector<size_t> indexes;
             std::priority_queue<t_q, std::vector<t_q>, decltype(cmp)> q(cmp);
-            auto index = m_rmq(range[0], range[1]);
+            size_t index = m_rmq(range[0], range[1]);
             if ( range[0] != 0 || range[1] != 0 )
                 q.push(make_tuple(range, index, m_weight[index]));
-            t_range r;
-            t_q t;
             while ( indexes.size() < k && !q.empty() ) {
-                t = q.top();
-                r = get<0>(t);
+                auto t = q.top();
+                auto r = get<0>(t);
                 auto i = get<1>(t);
                 auto w = get<2>(t);
-                //TODO limit the queue size too
+                //TODO limit the queue size?
                 if ( r[0] < i ) {
                     auto idx = m_rmq(r[0],i-1);
-                    q.push(make_tuple((t_range){{r[0],i-1}}, idx, m_weight[idx]));
+                    //TODO check differences and lvalue/rvalue stuff, I've some confusion about these concepts
+                    q.emplace((t_range){{r[0],i-1}}, idx, m_weight[idx]);
+                    //q.push(make_tuple((t_range){{r[0],i-1}}, idx, m_weight[idx]));
                 }
                 if ( r[1] > i ) {
                     auto idx = m_rmq(i+1,r[1]);
-                    q.push(make_tuple((t_range){{i+1,r[1]}}, idx, m_weight[idx])); 
+                    q.emplace((t_range){{i+1,r[1]}}, idx, m_weight[idx]);
+                    //q.push(make_tuple((t_range){{i+1,r[1]}}, idx, m_weight[idx])); 
                 }
                 indexes.push_back(i);
                 q.pop();
