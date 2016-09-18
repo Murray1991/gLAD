@@ -6,12 +6,15 @@ using namespace std;
 namespace glad {
 
     struct tnode {
+        
         tnode(string label) : label(label), lonode(nullptr), eqnode(nullptr), hinode(nullptr) {};
+        
         tnode(char ch = 0) : lonode(nullptr), eqnode(nullptr), hinode(nullptr) { label += ch; };
+        
         ~tnode() { 
             delete lonode; 
             delete eqnode; 
-            delete hinode; 
+            delete hinode;
         }
         
         bool is_end() {
