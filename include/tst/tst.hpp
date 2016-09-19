@@ -4,110 +4,44 @@
 #include <utility>
 #include <tuple>
 #include <cassert>
+#include <sdsl/vectors.hpp>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/bp_support.hpp>
 #include <sdsl/rmq_support.hpp>
 #include "tnode.hpp"
+#include "utils.hpp"
+
+/* check query starting with 'f'; possible bug?? TODO */
 
 using namespace std;
 using namespace sdsl;
 
 namespace glad {
- 
-    #define EOS ((char) 3)
     
-    typedef uint32_t                                    uint_t;
-    typedef int                                         int_t;
-    typedef std::tuple<uint_t, uint_t, char>            tTUUC;
-    typedef std::pair<std::string, uint_t>              tPSU;
-    typedef std::vector<tPSU>                           tVPSU;
-    typedef tPSU *                                      tPSU2;
-    typedef std::vector<tPSU2>                          tVPSU2;
-    typedef std::vector<std::string *>                  tVS;
-    typedef std::array<size_t,2>                        t_range;
-    
-    template<typename t_bv = sdsl::sd_vector<>,
+    template<typename t_bv = sdsl::rrr_vector<>, //sdsl::sd_vector<>,
          typename t_sel= typename t_bv::select_1_type,
-         typename t_weight = sdsl::int_vector<>,
+         typename t_weight = sdsl::vlc_vector<>,
+         typename t_rmq = sdsl::rmq_succinct_sct<0>,
          typename t_bp_support = sdsl::bp_support_sada<>,
          typename t_bp_rnk10 = sdsl::rank_support_v5<10,2>,
          typename t_bp_sel10 = sdsl::select_support_mcl<10,2>,
-         typename t_rmq = sdsl::rmq_succinct_sct<0>,
-         typename t_bv_uc = sdsl::bit_vector
+         typename t_bv_uc = sdsl::bit_vector,
+         typename t_label = sdsl::int_vector<8>
          >
          
     class tst {
-        
-        typedef sdsl::int_vector<8> t_label;
-        
+        //typedef sdsl::int_vector<8> t_label;
         t_label             m_label;
         t_weight            m_weight;
         t_bv_uc             m_bp;
-        t_bv_uc             m_helper;
+        t_bv                m_helper;
         t_bp_support        m_bp_support;
-        
         t_bv                m_start_bv;
         t_sel               m_start_sel;
         t_bp_rnk10          m_bp_rnk10;
         t_bp_sel10          m_bp_sel10;
-        
         t_rmq               m_rmq;
-        
-    private:
-        
-        void sort_unique(tVPSU2& string_weight) {
-            cout << "sort strings\n";
-            std::sort(string_weight.begin(), string_weight.end(), [](const tPSU2& a, const tPSU2& b) {
-                return a->first.compare(b->first) < 0;
-            });
-            cout << "end sort strings\n";
-            cout << "unique strings; from: " << string_weight.size() << endl;
-            size_t count = 0;
-            auto unique_end = std::unique(string_weight.begin(), string_weight.end(), [&](tPSU2& first, tPSU2& last) {
-                //last.first => mind blown!
-                if ( first->first.size() != last->first.size() )
-                    return false;
-                if ( first->first.compare(last->first) == 0 ) {
-                    //keep the higher weight, is it really necessary? maybe better a sum?
-                    first->second = first->second > last->second ? first->second : last->second; 
-                    last->second = first->second > last->second ? first->second : last->second;
-                    count++;
-                    return true;
-                }
-                return false;
-            });
-            /*
-            for ( tVPSU2::iterator it = unique_end; it != string_weight.end(); it++ )
-                delete *it; */
-            string_weight.resize(unique_end - string_weight.begin());
-            string_weight.shrink_to_fit();
-            cout << "end unique strings; deleted: " << count << endl;
-        }
-        
-        void process_input(const std::string& filename, tVPSU2& string_weight) {
-            cout << "process input...\n";
-            std::ifstream in(filename);
-            if ( !in ) {
-                std::cerr << "Error: Could not open file " << filename << endl;
-                exit(EXIT_FAILURE);
-            }
-            std::string entry;
-            try {
-                while ( std::getline(in, entry, '\t')) {
-                    std::transform(entry.begin(), entry.end(), entry.begin(), ::tolower);
-                    std::string s_weight;
-                    std::getline(in, s_weight);
-                    uint_t weight = stoull(s_weight);
-                    string_weight.push_back(new tPSU( entry+EOS, weight ));
-                }
-            } catch ( std::bad_alloc& e ) {
-                std::cerr << "Error: std::bad_alloc when filling from file..." << endl;
-                std::exit(EXIT_FAILURE);
-            }
-            in.close();
-            cout << "end process input...\n";
-        }
-        
+
     public:
         
         tst() {}
@@ -117,26 +51,29 @@ namespace glad {
         tst(const std::string& filename) {
             uint_t n = 0, N = 0, max_weight = 0;
             tVPSU2 string_weight;
-            process_input(filename,string_weight);
+            DEBUG_STDOUT("-- start getting input\n");
+            process_input(filename, string_weight);
+            DEBUG_STDOUT("-- end getting input\n");
+            DEBUG_STDOUT("-- start processing input (sort + unique)\n");
             sort_unique(string_weight);
+            DEBUG_STDOUT("-- end processing input\n");
             for ( auto it = string_weight.begin() ; it != string_weight.end(); it++ ) {
-                N += 1;
                 n += (*it)->first.size();
                 max_weight = max_weight > (*it)->second ? max_weight : (*it)->second;
             }
-            m_weight = t_weight (N, 0, bits::hi(max_weight)+1);
-            for ( size_t i = 0; i < N ; i++ ) {
-                m_weight[i] = string_weight[i]->second;
+            sdsl::int_vector<> weights ( string_weight.size(), 0, bits::hi(max_weight)+1 );
+            //m_weight = t_weight (string_weight.size(), 0, bits::hi(max_weight)+1);
+            for ( size_t i = 0; i < string_weight.size() ; i++ ) {
+                weights[i] = string_weight[i]->second;
             }
-
-            cout << "number of: " << N << endl;
-            build_tst_bp(string_weight, N, n, max_weight);
+            DEBUG_STDOUT("-- N: " << string_weight.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
+            DEBUG_STDOUT("-- start build_tst_bp\n");
+            build_tst_bp(string_weight, string_weight.size(), n, max_weight);
+            DEBUG_STDOUT("-- end build_tst_bp\n");
             
+            m_weight = t_weight( weights );
             m_rmq = t_rmq(&m_weight);
-            
-            cout << count_leaves() << endl;
-            cout << N << endl;
-            assert(count_leaves() == N);
+            assert(count_leaves() == string_weight.size());
         }
 
     private:
@@ -147,34 +84,33 @@ namespace glad {
         sdsl::int_vector<8>::iterator label_it;
         
         void build_tst_bp(tVPSU2& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
-            //TODO check the initialization values...
-            t_bv_uc start_bv(2*N+n+2, 0);
-            m_label     = t_label(n);
-            m_bp        = t_bv_uc(2*2*N, 0);
-            m_helper    = t_bv_uc(n+N, 0);
+            t_bv_uc                   start_bv(2*N+n+2, 0);
+            t_bv_uc                   helper(n+N,0);
+            int_vector<8> labels      = int_vector<8>(n);
+            m_bp                      = t_bv_uc(2*2*N, 0);
             
-            bp_it       = m_bp.begin();
-            start_it    = start_bv.begin();
-            label_it    = m_label.begin();
-            helper_it   = m_helper.begin();
-
+            bp_it                     = m_bp.begin();
+            start_it                  = start_bv.begin();
+            label_it                  = labels.begin();
+            helper_it                 = helper.begin();
             *(start_it++) = 1;
-            std::cout << "start: build tst...\n";
+            
             tnode * root  = build_tst(strings);
-            std::cout << "end: build tst...\n";
             delete root;
             
+            DEBUG_STDOUT("-- resizing bit data structures & eventually compress...\n");
             m_bp.resize(bp_it-m_bp.begin()); 
-            m_helper.resize(helper_it-m_helper.begin());
-            m_label.resize(label_it-m_label.begin()); 
+            labels.resize(label_it-labels.begin()); 
+            helper.resize(helper_it-helper.begin());
             start_bv.resize(start_it-start_bv.begin());
             
             m_start_bv   = t_bv(start_bv);
+            m_helper     = t_bv(helper);
+            m_label      = t_label(labels);
             m_start_sel  = t_sel(&m_start_bv);
             m_bp_support = t_bp_support(&m_bp);
-            m_bp_rnk10   = t_bp_rnk10(&m_bp);
-            m_bp_sel10   = t_bp_sel10(&m_bp);
-            
+            util::init_support(m_bp_rnk10, &m_bp);
+            util::init_support(m_bp_sel10, &m_bp);
         }
         
         tnode *build_tst (tVPSU2& strings) 
@@ -188,13 +124,13 @@ namespace glad {
             int_t first, last, index, level; bool help, marked;
             
             stk.emplace(0, strings.size()-1, 0, 0, 1, root, 0 <= target_level);
-            while ( ! stk.empty() ) {
-                
+            while ( ! stk.empty() ) 
+            {
                 std::tie(first, last, index, level, help, node, marked) = stk.top();
                 
-                if ( !marked )
-                    stk.pop();  // pointers have not destructors, it's safe to call
-                
+                if ( !marked ) {
+                    stk.pop();
+                }
                 if ( marked && !node->is_leaf() ) {
                     stk.pop();
                     if ( level < target_level )
@@ -209,11 +145,9 @@ namespace glad {
                     }
                     continue;
                 }
-                
-                //cout << "[" << first << "," << last << "]" << ". partitionate " << index << " " << strings[first]->first.size() << endl;
+            
                 std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
                 node->label = ch;
-                
                 if ( level < target_level ) {
                     start_it++;
                     *(bp_it++) = 1;
@@ -221,7 +155,6 @@ namespace glad {
                     *(label_it++) = ch; 
                     *(helper_it++) = help;
                 }
-                
                 if ( dx < last && !node->hinode ) {
                     node->hinode = new tnode();
                     stk.emplace(dx+1, last, index, level+1, 0, node->hinode, level+1 <= target_level);     //hinode
@@ -256,7 +189,6 @@ namespace glad {
         void mark(tnode * node, bool help) {
             if ( node == nullptr )
                 return;
-            
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
             *(helper_it++) = help;
             *(start_it++) = 1;
@@ -275,7 +207,6 @@ namespace glad {
         void compress (tnode * node) {
             if ( node == nullptr )
                 return;
-            
             while ( !node->lonode && node->eqnode && !node->hinode ) {
                 tnode * next = node->eqnode;
                 node->label += next->label;
@@ -304,7 +235,6 @@ namespace glad {
             compress(node->hinode);
         }
         
-        /* fa veramente schifo */
         tTUUC partitionate(const tVPSU2& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
@@ -316,7 +246,7 @@ namespace glad {
         
     public:    
         size_t get_nodes() {
-            return count_nodes();
+            return (m_bp.size()/2 + 1);
         }
         
         size_t get_size() {
@@ -388,12 +318,10 @@ namespace glad {
                     auto idx = m_rmq(r[0],i-1);
                     //TODO check differences and lvalue/rvalue stuff, I've some confusion about these concepts
                     q.emplace((t_range){{r[0],i-1}}, idx, m_weight[idx]);
-                    //q.push(make_tuple((t_range){{r[0],i-1}}, idx, m_weight[idx]));
                 }
                 if ( r[1] > i ) {
                     auto idx = m_rmq(i+1,r[1]);
                     q.emplace((t_range){{i+1,r[1]}}, idx, m_weight[idx]);
-                    //q.push(make_tuple((t_range){{i+1,r[1]}}, idx, m_weight[idx])); 
                 }
                 indexes.push_back(i);
                 q.pop();
@@ -406,23 +334,24 @@ namespace glad {
             std::string str = "";
             size_t v = m_bp_sel10(idx+1)-1;
             size_t i, o;
+            bool b = true;
             std::string lab;
-            for ( bool b = true; v != 0 ; ) {
+            for ( b = true; v != 0 ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
                 if ( !b && o-i > 1 ) {
-                    //TODO smarter way?
                     lab.assign(data+i, o-i-1);
                     str = std::move(lab) + str;
                 }
                 if ( b ) {
-                    //TODO smarter way?
                     lab.assign(data+i, o-i);
                     str = std::move(lab) + str;
                 }
                 b = m_helper[node_id(v)-1];
                 v = parent(v);
             }
+            //TODO assumption that first node has only one character...
+            if ( b ) str = *(data)+str;
             return str;
         }
         
@@ -457,10 +386,6 @@ namespace glad {
         
         size_t count_leaves() {
             return m_bp_rnk10(m_bp_support.find_close(0)+1);
-        }
-        
-        size_t count_nodes() {
-            return (m_bp.size()/2 + 1);
         }
         
         inline size_t node_id(size_t v) const{
