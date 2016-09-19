@@ -27,7 +27,7 @@ old.bin: old/main.cpp old/tst.cpp
 main:	build main.bin maind.bin
 
 main.bin: src/main.cpp
-	$(CXX) $^ $(CXX_FLAGS) $(DEBUG) $(INCLUDES) -o $(build)/$@ -lsdsl -ldivsufsort -ldivsufsort64
+	$(CXX) $^ $(CXX_FLAGS) -DDEBUG $(INCLUDES) -o $(build)/$@ -lsdsl -ldivsufsort -ldivsufsort64
 
 maind.bin: src/main.cpp
 	$(CXX) $^ $(CXX_FLAGS_NO_OPT) $(DEBUG) -DDEBUG $(INCLUDES) -o $(build)/$@ -lsdsl -ldivsufsort -ldivsufsort64
