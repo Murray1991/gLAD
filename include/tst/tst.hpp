@@ -11,8 +11,6 @@
 #include "tnode.hpp"
 #include "utils.hpp"
 
-/* check query starting with 'f'; possible bug?? TODO */
-
 using namespace std;
 using namespace sdsl;
 
@@ -30,7 +28,7 @@ namespace glad {
          >
          
     class tst {
-        //typedef sdsl::int_vector<8> t_label;
+        
         t_label             m_label;
         t_weight            m_weight;
         t_bv_uc             m_bp;
@@ -75,7 +73,44 @@ namespace glad {
             m_rmq = t_rmq(&m_weight);
             assert(count_leaves() == string_weight.size());
         }
-
+        
+    public:    
+        
+        tVPSU top_k(std::string prefix, size_t k) const{
+            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
+            auto range = prefix_range(prefix);
+            auto top_idx = heaviest_indexes(range, k);
+            tVPSU result_list;
+            for (auto idx : top_idx){
+                auto str = build_string(idx);
+                result_list.push_back(tPSU(std::move(str), m_weight[idx]));
+            }
+            return result_list;
+        }
+        
+        bool lookup(string prefix) const {
+            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
+            return search(prefix) > 0;
+        }
+        
+        size_t get_nodes() {
+            return (m_bp.size()/2 + 1);
+        }
+        
+        size_t get_size() {
+            size_t size = size_in_bytes(m_label) +
+                size_in_bytes(m_bp) +
+                size_in_bytes(m_bp_support) +
+                size_in_bytes(m_bp_rnk10) +
+                size_in_bytes(m_bp_sel10) +
+                size_in_bytes(m_start_bv) +
+                size_in_bytes(m_start_sel) +
+                size_in_bytes(m_weight) +
+                size_in_bytes(m_rmq) +
+                size_in_bytes(m_helper);
+            return size;
+        }
+        
     private:
         
         sdsl::bit_vector::iterator bp_it;
@@ -235,7 +270,7 @@ namespace glad {
             compress(node->hinode);
         }
         
-        tTUUC partitionate(const tVPSU2& strings, uint64_t first, uint64_t last, uint64_t index) {
+        inline tTUUC partitionate(const tVPSU2& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
             char ch = strings[m]->first.at(index);
@@ -243,44 +278,6 @@ namespace glad {
             for ( dx = last; dx > first && strings[dx]->first.size() > index && strings[dx]->first.at(index) != ch; dx-- );
             return make_tuple(sx,dx,ch);
         }
-        
-    public:    
-        size_t get_nodes() {
-            return (m_bp.size()/2 + 1);
-        }
-        
-        size_t get_size() {
-            size_t size = size_in_bytes(m_label) +
-                size_in_bytes(m_bp) +
-                size_in_bytes(m_bp_support) +
-                size_in_bytes(m_bp_rnk10) +
-                size_in_bytes(m_bp_sel10) +
-                size_in_bytes(m_start_bv) +
-                size_in_bytes(m_start_sel) +
-                size_in_bytes(m_weight) +
-                size_in_bytes(m_rmq) +
-                size_in_bytes(m_helper);
-            return size;
-        }
-        
-        bool lookup(string prefix) const {
-            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
-            return search(prefix) > 0;
-        }
-        
-        tVPSU top_k(std::string prefix, size_t k) const{
-            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
-            auto range = prefix_range(prefix);
-            auto top_idx = heaviest_indexes(range, k);
-            tVPSU result_list;
-            for (auto idx : top_idx){
-                auto str = build_string(idx);
-                result_list.push_back(tPSU(str, m_weight[idx]));
-            }
-            return result_list;
-        }
-        
-    private:
         
         inline int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
             size_t cv = v+1;
@@ -305,9 +302,10 @@ namespace glad {
             };
             std::vector<size_t> indexes;
             std::priority_queue<t_q, std::vector<t_q>, decltype(cmp)> q(cmp);
-            size_t index = m_rmq(range[0], range[1]);
-            if ( range[0] != 0 || range[1] != 0 )
+            if ( range[0] <= range[1] ) {
+                size_t index = m_rmq(range[0], range[1]);
                 q.push(make_tuple(range, index, m_weight[index]));
+            }
             while ( indexes.size() < k && !q.empty() ) {
                 auto t = q.top();
                 auto r = get<0>(t);
@@ -316,7 +314,6 @@ namespace glad {
                 //TODO limit the queue size?
                 if ( r[0] < i ) {
                     auto idx = m_rmq(r[0],i-1);
-                    //TODO check differences and lvalue/rvalue stuff, I've some confusion about these concepts
                     q.emplace((t_range){{r[0],i-1}}, idx, m_weight[idx]);
                 }
                 if ( r[1] > i ) {
@@ -329,7 +326,7 @@ namespace glad {
             return indexes;
         }
         
-        std::string build_string(size_t idx) const {
+        inline std::string build_string(size_t idx) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
             size_t v = m_bp_sel10(idx+1)-1;
@@ -350,19 +347,75 @@ namespace glad {
                 b = m_helper[node_id(v)-1];
                 v = parent(v);
             }
-            //TODO assumption that first node has only one character...
+            //TODO here assumption that first node has only one character...
             if ( b ) str = *(data)+str;
             return str;
         }
         
-        t_range prefix_range(const std::string& prefix) const {
-            int64_t v = search(prefix);
-            if ( v < 0 ) return {{0,0}};
+        /* build string from node v_from upwards to node v_to */
+        inline std::string build_string(size_t v_from, size_t v_to) const {
+            const char * data = (const char *) m_label.data();
+            std::string str = "";
+            size_t v = v_from;//m_bp_sel10(idx+1)-1;
+            size_t i, o;
+            bool b = true; /* il nodo di partenza si assume essere true... */
+            std::string lab;
+            for ( b = true; v != v_to ; ) {
+                i = get_start_label(v);
+                o = get_end_label(v);
+                if ( !b && o-i > 1 ) {
+                    lab.assign(data+i, o-i-1);
+                    str = std::move(lab) + str;
+                }
+                if ( b ) {
+                    lab.assign(data+i, o-i);
+                    str = std::move(lab) + str;
+                }
+                b = m_helper[node_id(v)-1];
+                v = parent(v);
+            }
+            //TODO here assumption that first node has only one character...
+            if ( b ) str = *(data)+str;
+            return str;
+        }
+        
+        inline t_range prefix_range(const size_t& v) const {
+            if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
-        // lookup for scnt repr
-        int64_t search(const string& prefix) const {
+        inline t_range prefix_range(const std::string& prefix) const {
+            int64_t v = blind_search(prefix);
+            if ( v < 0 ) return {{1,0}};
+            return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
+        }
+        
+        /* blind search */
+        int64_t blind_search(const string& prefix) const {
+            int64_t v = 0, i = 0;
+            const char * data = (const char *) m_label.data();
+            const size_t pref_len = prefix.size();
+            size_t plen, start, end, llen;
+            while ( i != pref_len && v >= 0 ) {
+                plen = pref_len-i;
+                start = get_start_label(v);
+                end = get_end_label(v);
+                llen = end-start;
+                if ( plen < llen )
+                    break;
+                i += llen-1;
+                v = map_to_edge(v, prefix.at(i), data[end-1]);
+                i += (prefix.at(i) == data[end-1]);
+            }
+            
+            if ( v > 0 && build_string(v,0).find(prefix) != 0 )
+                return -1;
+            
+            return v;
+        }
+        
+        /* complete search */
+        inline int64_t search(const string& prefix) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
@@ -384,7 +437,7 @@ namespace glad {
             return v;
         }
         
-        size_t count_leaves() {
+        inline size_t count_leaves() {
             return m_bp_rnk10(m_bp_support.find_close(0)+1);
         }
         
