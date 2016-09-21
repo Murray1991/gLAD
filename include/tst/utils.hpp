@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <set>
 #include <sdsl/bit_vectors.hpp>
 
 using namespace sdsl;
@@ -25,35 +27,23 @@ namespace glad {
     typedef std::tuple<uint_t, uint_t, char>            tTUUC;
     typedef std::pair<std::string, uint_t>              tPSU;
     typedef std::vector<tPSU>                           tVPSU;
-    typedef tPSU *                                      tPSU2;
-    typedef std::vector<tPSU2>                          tVPSU2;
     typedef std::vector<std::string *>                  tVS;
     typedef std::array<size_t,2>                        t_range;
     
-    void sort_unique(tVPSU2& string_weight) {
-            std::sort(string_weight.begin(), string_weight.end(), [](const tPSU2& a, const tPSU2& b) {
-                return a->first.compare(b->first) < 0;
+    void sort_unique(tVPSU& string_weight) {
+            std::sort(string_weight.begin(), string_weight.end(), [](const tPSU& a, const tPSU& b) {
+                int res = a.first.compare(b.first);
+                if ( res == 0)
+                    return a.second > b.second;
+                return res < 0;
             });
-            auto unique_end = std::unique(string_weight.begin(), string_weight.end(), [](tPSU2& first, tPSU2& last) {
-                //last.first => mind blown!
-                if ( first->first.size() != last->first.size() )
-                    return false;
-                if ( first->first.compare(last->first) == 0 ) {
-                    //keep the higher weight, is it really necessary? maybe better a sum?
-                    first->second = first->second > last->second ? first->second : last->second; 
-                    last->second = first->second > last->second ? first->second : last->second;
-                    return true;
-                }
-                return false;
+            auto unique_end = std::unique(string_weight.begin(), string_weight.end(), [](const tPSU& a, const tPSU& b){
+                return (a.first.size() == b.first.size() && a.first.compare(b.first) == 0);
             });
-            // Sorry...
-            //for ( tVPSU2::iterator it = unique_end; it != string_weight.end(); it++ )
-            //    delete *it;
-            string_weight.resize(unique_end - string_weight.begin());
-            string_weight.shrink_to_fit();
+            string_weight.resize(unique_end-string_weight.begin());
         }
         
-        void process_input(const std::string& filename, tVPSU2& string_weight) {
+        void process_input(const std::string& filename, tVPSU& string_weight) {
             std::ifstream in(filename);
             if ( !in ) {
                 std::cerr << "Error: Could not open file " << filename << endl;
@@ -63,10 +53,11 @@ namespace glad {
             try {
                 while ( std::getline(in, entry, '\t')) {
                     std::transform(entry.begin(), entry.end(), entry.begin(), ::tolower);
+                    entry += EOS;
                     std::string s_weight;
                     std::getline(in, s_weight);
                     uint_t weight = stoull(std::move(s_weight));
-                    string_weight.push_back(new tPSU( std::move(entry) + EOS, weight ));
+                    string_weight.push_back(tPSU( std::move(entry), weight ));
                 }
             } catch ( std::bad_alloc& e ) {
                 std::cerr << "Error: std::bad_alloc when filling from file..." << endl;
@@ -74,7 +65,4 @@ namespace glad {
             }
             in.close();
         }
-    
-    //TODO reimplement something like std::unique and use two parallel vectors for strings and weights
-
 }
