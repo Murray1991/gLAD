@@ -1,4 +1,5 @@
 #pragma once
+
 #include <iostream>
 #include <algorithm>
 #include <utility>
@@ -16,18 +17,20 @@ using namespace sdsl;
 
 namespace glad {
     
-    template<typename t_bv = sdsl::rrr_vector<>, //sdsl::sd_vector<>,
+    template< typename t_bv = sdsl::rrr_vector<>,
          typename t_sel= typename t_bv::select_1_type,
          typename t_weight = sdsl::vlc_vector<>,
          typename t_rmq = sdsl::rmq_succinct_sct<0>,
          typename t_bp_support = sdsl::bp_support_sada<>,
          typename t_bp_rnk10 = sdsl::rank_support_v5<10,2>,
-         typename t_bp_sel10 = sdsl::select_support_mcl<10,2>,
-         typename t_bv_uc = sdsl::bit_vector,
-         typename t_label = sdsl::int_vector<8>
+         typename t_bp_sel10 = sdsl::select_support_mcl<10,2>
          >
          
     class tst {
+        
+        typedef std::vector<string*>    tVS;
+        typedef sdsl::bit_vector        t_bv_uc;
+        typedef sdsl::int_vector<8>     t_label;
         
         t_label             m_label;
         t_weight            m_weight;
@@ -48,35 +51,44 @@ namespace glad {
         
         tst(const std::string& filename) {
             uint_t n = 0, N = 0, max_weight = 0;
-            tVPSU2 string_weight;
+            tVPSU string_weight;
             DEBUG_STDOUT("-- start getting input\n");
             process_input(filename, string_weight);
             DEBUG_STDOUT("-- end getting input\n");
             DEBUG_STDOUT("-- start processing input (sort + unique)\n");
             sort_unique(string_weight);
             DEBUG_STDOUT("-- end processing input\n");
-            for ( auto it = string_weight.begin() ; it != string_weight.end(); it++ ) {
-                n += (*it)->first.size();
-                max_weight = max_weight > (*it)->second ? max_weight : (*it)->second;
-            }
+            std::for_each( string_weight.begin() , string_weight.end(), [&n,&max_weight](const tPSU& a) {
+                n+= a.first.size();
+                if ( a.second > max_weight ) max_weight = a.second; 
+            });
+            
+            DEBUG_STDOUT("-- building strings & weights\n");
             sdsl::int_vector<> weights ( string_weight.size(), 0, bits::hi(max_weight)+1 );
-            //m_weight = t_weight (string_weight.size(), 0, bits::hi(max_weight)+1);
-            for ( size_t i = 0; i < string_weight.size() ; i++ ) {
-                weights[i] = string_weight[i]->second;
-            }
-            DEBUG_STDOUT("-- N: " << string_weight.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
+            tVS strings;
+            strings.reserve( string_weight.size() );
+            size_t i=0;
+            std::for_each( string_weight.begin(), string_weight.end(), [&weights, &strings, &i](tPSU& a) {
+                  weights[i] = std::move(a.second);
+                  strings.push_back(new std::string(std::move(a.first)));
+                  i++;
+            });
+            DEBUG_STDOUT("-- erasing string_weight\n");
+            decltype(string_weight){}.swap(string_weight);
+            DEBUG_STDOUT("-- end building strings & weights\n");
+            DEBUG_STDOUT("-- N: " << strings.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
             DEBUG_STDOUT("-- start build_tst_bp\n");
-            build_tst_bp(string_weight, string_weight.size(), n, max_weight);
+            build_tst_bp(strings, strings.size(), n, max_weight);
             DEBUG_STDOUT("-- end build_tst_bp\n");
             
             m_weight = t_weight( weights );
             m_rmq = t_rmq(&m_weight);
-            assert(count_leaves() == string_weight.size());
+            assert(count_leaves() == strings.size());
         }
         
     public:    
         
-        tVPSU top_k(std::string prefix, size_t k) const{
+        tVPSU top_k (std::string prefix, size_t k) const {
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             auto range = prefix_range(prefix);
             auto top_idx = heaviest_indexes(range, k);
@@ -118,7 +130,7 @@ namespace glad {
         sdsl::bit_vector::iterator helper_it;
         sdsl::int_vector<8>::iterator label_it;
         
-        void build_tst_bp(tVPSU2& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
+        void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
             t_bv_uc                   start_bv(2*N+n+2, 0);
             t_bv_uc                   helper(n+N,0);
             int_vector<8> labels      = int_vector<8>(n);
@@ -133,12 +145,13 @@ namespace glad {
             tnode * root  = build_tst(strings);
             delete root;
             
-            DEBUG_STDOUT("-- resizing bit data structures & eventually compress...\n");
+            DEBUG_STDOUT("-- resizing...\n");
             m_bp.resize(bp_it-m_bp.begin()); 
             labels.resize(label_it-labels.begin()); 
             helper.resize(helper_it-helper.begin());
             start_bv.resize(start_it-start_bv.begin());
             
+            DEBUG_STDOUT("-- building data structures...\n");
             m_start_bv   = t_bv(start_bv);
             m_helper     = t_bv(helper);
             m_label      = t_label(labels);
@@ -148,10 +161,10 @@ namespace glad {
             util::init_support(m_bp_sel10, &m_bp);
         }
         
-        tnode *build_tst (tVPSU2& strings) 
+        tnode *build_tst (tVS& strings) 
         {
             typedef std::tuple<int_t, int_t, int_t, int_t, bool, tnode *, bool> call_t;
-            constexpr int_t target_level = 5; // >= 1 , with an higher number should be more efficient in memory consumption?s
+            constexpr int_t target_level = 5; // >= 1 , with an higher number should be more efficient in memory consumption?
             
             std::stack<call_t> stk;
             int_t sx, dx; char ch;
@@ -185,10 +198,10 @@ namespace glad {
                 node->label = ch;
                 if ( level < target_level ) {
                     start_it++;
-                    *(bp_it++) = 1;
-                    *(start_it++) = 1;
-                    *(label_it++) = ch; 
-                    *(helper_it++) = help;
+                    *(bp_it++)      = 1;
+                    *(start_it++)   = 1;
+                    *(label_it++)   = ch; 
+                    *(helper_it++)  = help;
                 }
                 if ( dx < last && !node->hinode ) {
                     node->hinode = new tnode();
@@ -208,7 +221,7 @@ namespace glad {
                             }
                             stk.pop();
                         }
-                        //cout << sx << ". deleted" << endl;
+                        /* delete the string without resize the container */
                         delete strings[sx];
                         strings[sx] = nullptr;
                     }
@@ -225,9 +238,9 @@ namespace glad {
             if ( node == nullptr )
                 return;
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
-            *(helper_it++) = help;
-            *(start_it++) = 1;
-            *(bp_it++) = 1;
+            *(helper_it++)  = help;
+            *(start_it++)   = 1;
+            *(bp_it++)      = 1;
             mark(node->lonode, 0);
             mark(node->eqnode, 1);
             mark(node->hinode, 0);
@@ -270,19 +283,20 @@ namespace glad {
             compress(node->hinode);
         }
         
-        inline tTUUC partitionate(const tVPSU2& strings, uint64_t first, uint64_t last, uint64_t index) {
+        // TODO more "elegant" way? maybe using stl
+        inline tTUUC partitionate(const tVS& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
-            char ch = strings[m]->first.at(index);
-            for ( sx = first; sx < last && strings[sx]->first.size() > index && strings[sx]->first.at(index) != ch; sx++ );
-            for ( dx = last; dx > first && strings[dx]->first.size() > index && strings[dx]->first.at(index) != ch; dx-- );
+            char ch = strings[m]->at(index);
+            for ( sx = first; sx < last && strings[sx]->size() > index && strings[sx]->at(index) != ch; sx++ );
+            for ( dx = last; dx > first && strings[dx]->size() > index && strings[dx]->at(index) != ch; dx-- );
             return make_tuple(sx,dx,ch);
         }
         
         inline int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
             size_t cv = v+1;
             for ( bool b = false, h = false; m_bp[cv] ; b = h ) {
-                // "eqnode" is always present for internal nodes: h == true => b = true;
+                // "eqnode" is always present for internal nodes: (h == true) => (b = true)
                 h = m_helper[node_id(cv)-1];
                 if ( (!b && !h && ch1 < ch2) || (h && ch1 == ch2) || (b && !h && ch1 > ch2)) {
                     return cv;
@@ -311,7 +325,6 @@ namespace glad {
                 auto r = get<0>(t);
                 auto i = get<1>(t);
                 auto w = get<2>(t);
-                //TODO limit the queue size?
                 if ( r[0] < i ) {
                     auto idx = m_rmq(r[0],i-1);
                     q.emplace((t_range){{r[0],i-1}}, idx, m_weight[idx]);
@@ -356,9 +369,9 @@ namespace glad {
         inline std::string build_string(size_t v_from, size_t v_to) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
-            size_t v = v_from;//m_bp_sel10(idx+1)-1;
+            size_t v = v_from;
             size_t i, o;
-            bool b = true; /* il nodo di partenza si assume essere true... */
+            bool b = true; /* starting node is assumpted to be true... */
             std::string lab;
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
@@ -390,24 +403,24 @@ namespace glad {
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
-        /* blind search */
+        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
         int64_t blind_search(const string& prefix) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
             size_t plen, start, end, llen;
             while ( i != pref_len && v >= 0 ) {
-                plen = pref_len-i;
+                plen  = pref_len-i;
                 start = get_start_label(v);
-                end = get_end_label(v);
-                llen = end-start;
+                end   = get_end_label(v);
+                llen  = end-start;
                 if ( plen < llen )
                     break;
                 i += llen-1;
                 v = map_to_edge(v, prefix.at(i), data[end-1]);
                 i += (prefix.at(i) == data[end-1]);
             }
-            
+            /* here I have to match if the string is correct... */
             if ( v > 0 && build_string(v,0).find(prefix) != 0 )
                 return -1;
             
