@@ -28,7 +28,6 @@ namespace glad {
          
     class tst {
         
-        typedef std::vector<string*>    tVS;
         typedef sdsl::bit_vector        t_bv_uc;
         typedef sdsl::int_vector<8>     t_label;
         
@@ -64,24 +63,25 @@ namespace glad {
             });
             
             DEBUG_STDOUT("-- building strings & weights\n");
+            DEBUG_STDOUT(sizeof(tPSU) << " " << sizeof(string) << " " << sizeof(string*) << endl); 
             sdsl::int_vector<> weights ( string_weight.size(), 0, bits::hi(max_weight)+1 );
             tVS strings;
             strings.reserve( string_weight.size() );
             size_t i=0;
             std::for_each( string_weight.begin(), string_weight.end(), [&weights, &strings, &i](tPSU& a) {
                   weights[i] = std::move(a.second);
-                  strings.push_back(new std::string(std::move(a.first)));
+                  strings.push_back(std::move(a.first));
                   i++;
             });
             DEBUG_STDOUT("-- erasing string_weight\n");
             decltype(string_weight){}.swap(string_weight);
+            m_weight = t_weight( std::move(weights) );
             DEBUG_STDOUT("-- end building strings & weights\n");
             DEBUG_STDOUT("-- N: " << strings.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
             DEBUG_STDOUT("-- start build_tst_bp\n");
             build_tst_bp(strings, strings.size(), n, max_weight);
             DEBUG_STDOUT("-- end build_tst_bp\n");
             
-            m_weight = t_weight( weights );
             m_rmq = t_rmq(&m_weight);
             assert(count_leaves() == strings.size());
         }
@@ -196,13 +196,17 @@ namespace glad {
             
                 std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
                 node->label = ch;
+                // put this if at the end, should be safe...
                 if ( level < target_level ) {
                     start_it++;
                     *(bp_it++)      = 1;
                     *(start_it++)   = 1;
                     *(label_it++)   = ch; 
+#ifndef OTHER
                     *(helper_it++)  = help;
+#endif
                 }
+
                 if ( dx < last && !node->hinode ) {
                     node->hinode = new tnode();
                     stk.emplace(dx+1, last, index, level+1, 0, node->hinode, level+1 <= target_level);     //hinode
@@ -221,14 +225,19 @@ namespace glad {
                             }
                             stk.pop();
                         }
-                        /* delete the string without resize the container */
-                        delete strings[sx];
-                        strings[sx] = nullptr;
+                        /* clear string added */
+                        strings[sx].clear();
                     }
                 }
                 if ( first < sx && !node->lonode ) {
                     node->lonode = new tnode();
                     stk.emplace(first, sx-1, index, level+1, 0, node->lonode, level+1 <= target_level);    //lonode
+                }
+                // put this if at the end, should be safe...
+                if ( level < target_level ) {
+#ifdef OTHER
+                    *(helper_it++)  = ( node->lonode != nullptr );
+#endif
                 }
             }
             return root;
@@ -238,7 +247,11 @@ namespace glad {
             if ( node == nullptr )
                 return;
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
-            *(helper_it++)  = help;
+#ifndef OTHER
+            *(helper_it++) = help;
+#else
+            *(helper_it++) = ( node->lonode != nullptr );
+#endif
             *(start_it++)   = 1;
             *(bp_it++)      = 1;
             mark(node->lonode, 0);
@@ -287,13 +300,15 @@ namespace glad {
         inline tTUUC partitionate(const tVS& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
-            char ch = strings[m]->at(index);
-            for ( sx = first; sx < last && strings[sx]->size() > index && strings[sx]->at(index) != ch; sx++ );
-            for ( dx = last; dx > first && strings[dx]->size() > index && strings[dx]->at(index) != ch; dx-- );
+            char ch = strings[m].at(index);
+            for ( sx = first; sx < last && strings[sx].size() > index && strings[sx].at(index) != ch; sx++ );
+            for ( dx = last; dx > first && strings[dx].size() > index && strings[dx].at(index) != ch; dx-- );
             return make_tuple(sx,dx,ch);
         }
         
+#ifndef OTHER
         inline int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
+            //DEBUG_STDOUT(v << " , " << get_label(v) << " | " << children(v) << " | " << m_helper[node_id(v)-1] << endl);
             size_t cv = v+1;
             for ( bool b = false, h = false; m_bp[cv] ; b = h ) {
                 // "eqnode" is always present for internal nodes: (h == true) => (b = true)
@@ -308,7 +323,24 @@ namespace glad {
             }
             return -1;
         }
-        
+#else
+        inline int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
+            //DEBUG_STDOUT(v << " , " << get_label(v) << " | " << children(v) << " | " << m_helper[node_id(v)-1] << endl);
+            auto nodes = children(v);
+            auto h = m_helper[node_id(v)-1];
+            if (nodes.size() == 3)
+                return nodes[ (ch1==ch2) + (ch1>ch2)*2 ];
+            else if (nodes.size() == 2 && h == 1 && ch1 <= ch2)
+                return nodes[ch1==ch2];
+            else if (nodes.size() == 2 && h == 0 && ch1 >= ch2)
+                return nodes[ch1>ch2];
+            else if (nodes.size() == 1 && ch1 == ch2)
+                return nodes[0];
+            else if (nodes.size() == 0 && ch1 == ch2 )
+                return v;
+            return -1;
+        }
+#endif
         std::vector<size_t> heaviest_indexes( t_range& range, size_t k ) const {
             typedef std::tuple<t_range, size_t, size_t> t_q;
             auto cmp = [](const t_q& a, const t_q& b) { 
@@ -339,11 +371,31 @@ namespace glad {
             return indexes;
         }
         
+        inline bool check_if_eqnode(const size_t v, const size_t p) const {
+#ifndef OTHER
+            return m_helper[node_id(v)-1];
+#else
+            auto nodes = children(p);
+            auto h = m_helper[node_id(p)-1];
+            if (nodes.size() == 3)
+                return nodes[1] == v;
+            else if (nodes.size() == 2 && h == 1)
+                return nodes[1] == v;
+            else if (nodes.size() == 2 && h == 0)
+                return nodes[0] == v;
+            else if (nodes.size() == 1)
+                return nodes[0] == v;
+            DEBUG_STDERR("ALARM ALARM ALARM\n");
+            exit(EXIT_FAILURE);
+            return false;
+#endif
+        }
+        
         inline std::string build_string(size_t idx) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
             size_t v = m_bp_sel10(idx+1)-1;
-            size_t i, o;
+            size_t i, o, p;
             bool b = true;
             std::string lab;
             for ( b = true; v != 0 ; ) {
@@ -357,8 +409,9 @@ namespace glad {
                     lab.assign(data+i, o-i);
                     str = std::move(lab) + str;
                 }
-                b = m_helper[node_id(v)-1];
-                v = parent(v);
+                p = parent(v);
+                b = check_if_eqnode(v,p);
+                v = p;
             }
             //TODO here assumption that first node has only one character...
             if ( b ) str = *(data)+str;
@@ -366,12 +419,13 @@ namespace glad {
         }
         
         /* build string from node v_from upwards to node v_to */
+        /*
         inline std::string build_string(size_t v_from, size_t v_to) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
             size_t v = v_from;
             size_t i, o;
-            bool b = true; /* starting node is assumpted to be true... */
+            bool b = true; // starting node is assumpted to be true... 
             std::string lab;
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
@@ -390,7 +444,7 @@ namespace glad {
             //TODO here assumption that first node has only one character...
             if ( b ) str = *(data)+str;
             return str;
-        }
+        }*/
         
         inline t_range prefix_range(const size_t& v) const {
             if ( v < 0 ) return {{1,0}};
@@ -398,7 +452,7 @@ namespace glad {
         }
         
         inline t_range prefix_range(const std::string& prefix) const {
-            int64_t v = blind_search(prefix);
+            int64_t v = search(prefix);
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
@@ -409,11 +463,14 @@ namespace glad {
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
             size_t plen, start, end, llen;
+            string str(prefix.size(), 0);
             while ( i != pref_len && v >= 0 ) {
                 plen  = pref_len-i;
                 start = get_start_label(v);
                 end   = get_end_label(v);
                 llen  = end-start;
+                for ( int k = 0; k < llen && k < plen; k++ )
+                    str[i+k] = data[start+k];
                 if ( plen < llen )
                     break;
                 i += llen-1;
@@ -421,8 +478,13 @@ namespace glad {
                 i += (prefix.at(i) == data[end-1]);
             }
             /* here I have to match if the string is correct... */
-            if ( v > 0 && build_string(v,0).find(prefix) != 0 )
+            if ( v > 0 && prefix.compare(str) != 0 ) {
+                DEBUG_STDOUT("Error in comparing: " << str << " with " << prefix << endl);
                 return -1;
+            }
+            /* if I don't build the string during the downward traversal I have to build it again... */
+            //if ( v > 0 && build_string(v,0).find(prefix) != 0 )
+            //    return -1;
             
             return v;
         }
@@ -458,6 +520,14 @@ namespace glad {
             return m_bp_support.rank(v);
         }
         
+        inline string get_label(size_t v) const {
+            const char * data = (const char *) m_label.data();
+            auto i = get_start_label(v);
+            auto o = get_end_label(v);
+            string s(data+i, o-i);
+            return s;
+        }
+        
         inline size_t get_start_label(size_t v) const {
             return m_start_sel(node_id(v)) + 1 - node_id(v);
         }
@@ -476,6 +546,16 @@ namespace glad {
 
         inline size_t parent(size_t v) const {
             return m_bp_support.enclose(v);
+        }
+        
+        inline std::vector<size_t> children(size_t v) const {
+            std::vector<size_t> res;
+            size_t cv = v+1;
+            while ( m_bp[cv] ) {
+                res.push_back(cv);
+                cv = m_bp_support.find_close(cv) + 1;
+            }
+            return res;
         }
         
     public:
