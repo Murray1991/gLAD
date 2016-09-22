@@ -15,7 +15,7 @@ To run the program:
 * `./build/main.bin ./data/italian-cities.txt`
 
 ## Results in a nutshell
-I've tested the application generating a succinct tst index built over titles and click counts of Wikipedia pages. The file of ~900 MB (cleaned from duplicates is about ~630 MB) has about ~30M of unique strings and the index generated is about ~310 MB. Top-k queries are completed with a time varying typically from 0.8 to 1.6 milliseconds.
+I've tested the application generating a succinct tst index built over titles and click counts of Wikipedia pages. The file of ~900 MB (cleaned from duplicates is about ~630 MB) has about ~30M of unique strings and the index generated is about ~310 MB. Top-5 queries are completed with a time varying typically from 0.8 to 1.6 milliseconds.
 
 ## Enviroment used
 The tests have been done using commodity hardware mounting a Intel(R) Core(TM)i5-3317U CPU clocked at 1.70GHz and a 4GB DDR3 memory. 
