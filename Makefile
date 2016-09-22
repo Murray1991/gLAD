@@ -1,6 +1,3 @@
-
-CC			= gcc
-
 CXX 			= g++
 CXX_FLAGS 		= -std=c++11 -O3 -march=native
 CXX_FLAGS_NO_OPT 	= -std=c++11 -O0
