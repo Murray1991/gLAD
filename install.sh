@@ -1,7 +1,7 @@
 #!/bin/bash
 
-mkdir external
-cd external
-git commit https://github.com/simongog/sdsl-lite.git
-cd ..
+DIRECTORY=./external
+
+[ ! -d $DIRECTORY ] && mkdir $DIRECTORY
+git clone https://github.com/simongog/sdsl-lite.git $DIRECTORY
 ./external/sdsl-lite/install.sh ./sdsl
