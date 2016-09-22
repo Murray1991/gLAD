@@ -27,7 +27,7 @@ namespace glad {
     typedef std::tuple<uint_t, uint_t, char>            tTUUC;
     typedef std::pair<std::string, uint_t>              tPSU;
     typedef std::vector<tPSU>                           tVPSU;
-    typedef std::vector<std::string *>                  tVS;
+    typedef std::vector<std::string>                  tVS;
     typedef std::array<size_t,2>                        t_range;
     
     void sort_unique(tVPSU& string_weight) {
