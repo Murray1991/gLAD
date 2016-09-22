@@ -1,5 +1,5 @@
 # gLAD
-Simple autocompletion application written in C++11 based on a succinct representation of a ternary search tree (tst). This application is built using the [Succinct Data Structure Library](https://github.com/simongog/sdsl-lite) and it is inspired by [this tutorial](https://github.com/simongog/sigir16-topkcomplete) presented at SIGIR 2016.
+Simple autocompletion application written in C++11 based on a succinct representation of a ternary search tree (tst). Succinct representation is achieved using the [Succinct Data Structure Library](https://github.com/simongog/sdsl-lite) and the application is inspired someway by [this tutorial](https://github.com/simongog/sigir16-topkcomplete) presented at SIGIR 2016.
 
 ## Installation guide
 * `git clone https://github.com/Murray1991/gLAD.git`
