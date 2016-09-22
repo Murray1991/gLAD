@@ -3,7 +3,7 @@ Simple autocompletion application based on a succinct representation of a ternar
 This application is inspired by this [tutorial](https://github.com/simongog/sigir16-topkcomplete) presented at SIGIR 2016.
 
 ## Installation guide
-* `https://github.com/Murray1991/gLAD.git`
+* `git clone https://github.com/Murray1991/gLAD.git`
 * `cd gLAD`
 * `./install.sh`
 * `make build && make main.bin`
