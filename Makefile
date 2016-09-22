@@ -9,7 +9,7 @@ INCLUDES		= -I sdsl/include/ -I include/tst/ -L sdsl/lib/
 DEBUG			= -g -pg
 build			= build
 
-.PHONY: clean index index1-main index4ci-main old
+.PHONY: clean
 
 build:
 	mkdir -p $(build)
@@ -24,3 +24,4 @@ maind.bin: src/main.cpp
 
 clean: 
 	-rm build/*
+
