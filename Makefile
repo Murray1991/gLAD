@@ -14,7 +14,7 @@ build:
 main:	build main.bin maind.bin
 
 main.bin: src/main.cpp
-	$(CXX) $^ $(CXX_FLAGS) $(INCLUDES) -o $(build)/$@ -lsdsl -ldivsufsort -ldivsufsort64
+	$(CXX) $^ $(CXX_FLAGS) $(INCLUDES) -DDEBUG -o $(build)/$@ -lsdsl -ldivsufsort -ldivsufsort64
 
 maind.bin: src/main.cpp
 	$(CXX) $^ $(CXX_FLAGS_NO_OPT) $(DEBUG) -DDEBUG $(INCLUDES) -o $(build)/$@ -lsdsl -ldivsufsort -ldivsufsort64
