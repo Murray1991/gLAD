@@ -23,3 +23,5 @@ The tests have been done using commodity hardware mounting a Intel(R) Core(TM)i5
 ## Known Issues
 * Very slow in building the index for a big file and very memory consuming in this phase. 
 
+## License
+This code is licensed under [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/)
