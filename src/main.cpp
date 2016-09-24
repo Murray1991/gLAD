@@ -10,8 +10,6 @@
 using namespace std;
 using namespace chrono;
 
-typedef std::__cxx11::basic_string<uint8_t> ustring;
-
 std::ifstream::pos_type filesize(const string& file) {
     std::ifstream in(file, std::ios::binary | std::ios::ate);
     return in.tellg(); 
