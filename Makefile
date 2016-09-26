@@ -21,17 +21,20 @@ top_k_queries.tst1.bin: test/top_k_queries.cpp
 top_k_queries.tst2.bin: test/top_k_queries.cpp
 	$(CXX) $^ $(CXX_FLAGS) -DTST2="tst2" -o $(build)/$@ $(DEBUG) $(INCLUDES)
 
+main.bin: src/main.cpp
+	$(CXX) $^ $(CXX_FLAGS) -DTST1="tst1" -o $(build)/$@ $(INCLUDES)
+
 main.tst1.bin: src/main.cpp
-	$(CXX) $^ $(CXX_FLAGS) -DDEBUG -DTST1="tst1" -o $(build)/$@ $(INCLUDES)
+	$(CXX) $^ $(CXX_FLAGS) -DTST1="tst1" -o $(build)/$@ $(INCLUDES)
 
 main.tst2.bin: src/main.cpp
-	$(CXX) $^ $(CXX_FLAGS) -DDEBUG -DTST2="tst2" -o $(build)/$@ $(INCLUDES) 
+	$(CXX) $^ $(CXX_FLAGS) -DTST2="tst2" -o $(build)/$@ $(INCLUDES) 
 
 maind.tst1.bin: src/main.cpp
-	$(CXX) $^ $(CXX_FLAGS_NO_OPT) -DDEBUG -DTST1="tst1" -o $(build)/$@ $(INCLUDES) $(DEBUG)
+	$(CXX) $^ $(CXX_FLAGS_NO_OPT) -DTST1="tst1" -o $(build)/$@ $(DEBUG) $(INCLUDES)
 
 maind.tst2.bin: src/main.cpp
-	$(CXX) $^ $(CXX_FLAGS_NO_OPT) -DDEBUG -DTST2="tst2" -o $(build)/$@ $(INCLUDES) $(DEBUG)
+	$(CXX) $^ $(CXX_FLAGS_NO_OPT) -DTST2="tst2" -o $(build)/$@ $(DEBUG) $(INCLUDES)
 
 clean: 
 	-rm build/*
