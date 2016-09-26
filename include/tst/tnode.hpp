@@ -31,4 +31,4 @@ namespace glad {
         tnode *eqnode;
         tnode *hinode;
     };
-}s
+}
