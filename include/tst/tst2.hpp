@@ -107,10 +107,12 @@ namespace glad {
             return search(prefix) > 0;
         }
         
+        D ( __attribute__((noinline)) )
         size_t get_nodes() {
             return (m_bp.size()/2 + 1);
         }
         
+        D ( __attribute__((noinline)) )
         size_t get_size() {
             size_t size = size_in_bytes(m_label) +
                 size_in_bytes(m_bp) +
@@ -352,7 +354,8 @@ namespace glad {
             return indexes;
         }
         
-        inline bool check_if_eqnode(const size_t v, const size_t p) const {
+        D ( __attribute__((noinline)) )
+        bool check_if_eqnode(const size_t v, const size_t p) const {
 
             auto nodes = children(p);
             auto h = m_helper[node_id(p)-1];
@@ -377,18 +380,12 @@ namespace glad {
             size_t v = m_bp_sel10(idx+1)-1;
             size_t i, o, p;
             bool b = true;
-            std::string lab;
+            #pragma ivdep
             for ( b = true; v != 0 ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
-                if ( !b && o-i > 1 ) {
-                    lab.assign(data+i, o-i-1);
-                    str = std::move(lab) + str;
-                }
-                if ( b ) {
-                    lab.assign(data+i, o-i);
-                    str = std::move(lab) + str;
-                }
+                std::string lab(data+i, o - i - !b);
+                str = std::move(lab) + str;
                 p = parent(v);
                 b = check_if_eqnode(v,p);
                 v = p;
@@ -445,6 +442,40 @@ namespace glad {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
+            
+            string str (prefix.size(), 0);
+            size_t plen  = pref_len-i;
+            size_t start = get_start_label(v);
+            size_t end   = get_end_label(v);
+            size_t llen  = end-start;
+            #pragma ivdep
+            for ( int k = 0; k < llen && k < plen; k++ )
+                    str[i+k] = data[start+k];
+            while ( plen >= llen && i != pref_len && v >= 0 ) {
+                i     += llen-1;
+                v     = map_to_edge(v, prefix.at(i), data[end-1]);
+                i     += (prefix.at(i) == data[end-1]);
+                plen  = pref_len-i;
+                start = get_start_label(v);
+                end   = get_end_label(v);
+                llen  = end-start;
+                #pragma ivdep
+                for ( int k = 0; k < llen && k < plen; k++ )
+                    str[i+k] = data[start+k];
+            }
+            /* here I have to match if the string is correct... */
+            if ( v > 0 && prefix.compare(str) != 0 ) {
+                return -1;
+            }
+            return v;
+        }
+        
+        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
+        /*D ( __attribute__((noinline)) )
+        int64_t blind_search(const string& prefix) const {
+            int64_t v = 0, i = 0;
+            const char * data = (const char *) m_label.data();
+            const size_t pref_len = prefix.size();
             size_t plen, start, end, llen;
             string str(prefix.size(), 0);
             while ( i != pref_len && v >= 0 ) {
@@ -460,17 +491,12 @@ namespace glad {
                 v = map_to_edge(v, prefix.at(i), data[end-1]);
                 i += (prefix.at(i) == data[end-1]);
             }
-            /* here I have to match if the string is correct... */
+            // here I have to match if the string is correct... 
             if ( v > 0 && prefix.compare(str) != 0 ) {
-                DEBUG_STDOUT("Error in comparing: " << str << " with " << prefix << endl);
                 return -1;
             }
-            /* if I don't build the string during the downward traversal I have to build it again... */
-            //if ( v > 0 && build_string(v,0).find(prefix) != 0 )
-            //    return -1;
-            
             return v;
-        }
+        }*/
         
         /* complete search */
         D ( __attribute__((noinline)) )
@@ -496,15 +522,18 @@ namespace glad {
             return v;
         }
         
-        inline size_t count_leaves() {
+        D ( __attribute__((noinline)) )
+        size_t count_leaves() {
             return m_bp_rnk10(m_bp_support.find_close(0)+1);
         }
         
-        inline size_t node_id(size_t v) const{
+        D ( __attribute__((noinline)) )
+        size_t node_id(size_t v) const{
             return m_bp_support.rank(v);
         }
         
-        inline string get_label(size_t v) const {
+        D ( __attribute__((noinline)) )
+        string get_label(size_t v) const {
             const char * data = (const char *) m_label.data();
             auto i = get_start_label(v);
             auto o = get_end_label(v);
@@ -512,27 +541,33 @@ namespace glad {
             return s;
         }
         
-        inline size_t get_start_label(size_t v) const {
+        D ( __attribute__((noinline)) )
+        size_t get_start_label(size_t v) const {
             return m_start_sel(node_id(v)) + 1 - node_id(v);
         }
         
-        inline size_t get_end_label(size_t v) const {
+        D ( __attribute__((noinline)) )
+        size_t get_end_label(size_t v) const {
             return m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
         }
         
-        inline size_t is_leaf(size_t v) const {
+        D ( __attribute__((noinline)) )
+        size_t is_leaf(size_t v) const {
             return m_bp[v+1] == 0;
         }
-
-        inline size_t is_root(size_t v) const {
+        
+        D ( __attribute__((noinline)) )
+        size_t is_root(size_t v) const {
             return v == 0;
         }
 
-        inline size_t parent(size_t v) const {
+        D ( __attribute__((noinline)) )
+        size_t parent(size_t v) const {
             return m_bp_support.enclose(v);
         }
         
-        inline std::vector<size_t> children(size_t v) const {
+        D ( __attribute__((noinline)) )
+        std::vector<size_t> children(size_t v) const {
             std::vector<size_t> res;
             size_t cv = v+1;
             while ( m_bp[cv] ) {
