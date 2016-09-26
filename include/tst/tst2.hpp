@@ -88,7 +88,7 @@ namespace glad {
         
     public:    
         
-        __attribute__((noinline))
+        D ( __attribute__((noinline)) )
         tVPSU top_k (std::string prefix, size_t k) const {
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             auto range = prefix_range(prefix);
@@ -101,6 +101,7 @@ namespace glad {
             return result_list;
         }
         
+        D ( __attribute__((noinline)) )
         bool lookup(string prefix) const {
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             return search(prefix) > 0;
@@ -302,6 +303,7 @@ namespace glad {
             return make_tuple(sx,dx,ch);
         }
         
+        D ( __attribute__((noinline)) )
         int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
             //DEBUG_STDOUT(v << " , " << get_label(v) << " | " << children(v) << " | " << m_helper[node_id(v)-1] << endl);
             auto nodes = children(v);
@@ -319,6 +321,7 @@ namespace glad {
             return -1;
         }
 
+        D ( __attribute__((noinline)) )
         std::vector<size_t> heaviest_indexes( t_range& range, size_t k ) const {
             typedef std::tuple<t_range, size_t, size_t> t_q;
             auto cmp = [](const t_q& a, const t_q& b) { 
@@ -367,6 +370,7 @@ namespace glad {
 
         }
         
+        D ( __attribute__((noinline)) )
         std::string build_string(size_t idx) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
@@ -422,18 +426,21 @@ namespace glad {
             return str;
         }*/
         
+        D ( __attribute__((noinline)) )
         t_range prefix_range(const size_t& v) const {
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
+        D ( __attribute__((noinline)) )
         t_range prefix_range(const std::string& prefix) const {
-            int64_t v = search(prefix);
+            int64_t v = blind_search(prefix);
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
         /* actually this kind of "blind search" is useful if a string is not represented in the tst */
+        D ( __attribute__((noinline)) )
         int64_t blind_search(const string& prefix) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
@@ -466,6 +473,7 @@ namespace glad {
         }
         
         /* complete search */
+        D ( __attribute__((noinline)) )
         int64_t search(const string& prefix) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
