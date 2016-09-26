@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <set>
-#include <sdsl/bit_vectors.hpp>
 
 using namespace sdsl;
 using namespace std;
@@ -11,7 +10,7 @@ using namespace std;
 namespace glad {
     
 #ifdef DEBUG
-    #define D(x) (x)
+    #define D(x) x
     #define DEBUG_STDERR(x) (std::cerr << x)
     #define DEBUG_STDOUT(x) (std::cout << x)
 #else 
@@ -66,3 +65,4 @@ namespace glad {
             in.close();
         }
 }
+

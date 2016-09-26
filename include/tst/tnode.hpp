@@ -1,4 +1,5 @@
 #pragma once
+
 #include <string>
 
 using namespace std;
@@ -30,4 +31,4 @@ namespace glad {
         tnode *eqnode;
         tnode *hinode;
     };
-}
+}s
