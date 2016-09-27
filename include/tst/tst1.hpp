@@ -17,7 +17,7 @@ using namespace sdsl;
 
 namespace glad {
     
-    template< typename t_bv = sdsl::rrr_vector<>,
+    template< typename t_bv = sdsl::bit_vector,
          typename t_sel= typename t_bv::select_1_type,
          typename t_weight = sdsl::vlc_vector<>,
          typename t_rmq = sdsl::rmq_succinct_sct<0>,
@@ -86,17 +86,24 @@ namespace glad {
             assert(count_leaves() == strings.size());
         }
         
+        std::string myprefix;
+        
     public:    
         
         D ( __attribute__((noinline)) )
         tVPSU top_k (std::string prefix, size_t k) const {
+            constexpr size_t g = 5; // "guess" constant multiplier
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
-            auto range = prefix_range(prefix);
+            std::string new_prefix(prefix.size(), 0);
+            auto v       = blind_search(prefix, new_prefix);
+            auto range   = prefix_range(v);
             auto top_idx = heaviest_indexes(range, k);
             tVPSU result_list;
             for (auto idx : top_idx){
-                auto str = build_string(idx);
-                result_list.push_back(tPSU(std::move(str), m_weight[idx]));
+                std::string s(g*prefix.size(), 0);
+                s += new_prefix;
+                s += std::move( build_string(m_bp_sel10(idx+1)-1, parent(v)) );
+                result_list.push_back(tPSU(std::move(s), m_weight[idx]));
             }
             return result_list;
         }
@@ -373,6 +380,29 @@ namespace glad {
             return str;
         }
         
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
+        D ( __attribute__((noinline)) )
+        std::string build_string(size_t v_from, size_t v_to) const {
+            const char * data = (const char *) m_label.data();
+            std::string str = "";
+            size_t v = v_from;
+            size_t i, o, p;
+            bool b = true;
+            #pragma ivdep
+            for ( b = true; v != v_to ; ) {
+                i = get_start_label(v);
+                o = get_end_label(v);
+                std::string lab(data+i, o - i - !b);
+                str = std::move(lab) + str;
+                p = parent(v);
+                b = check_if_eqnode(v);
+                v = p;
+            }
+            //TODO is it okay? MUMBLE MUMBLE
+            if ( b ) str = *(data+get_start_label(v))+str;
+            return str;
+        }
+        
         D ( __attribute__((noinline)) )
         std::string build_string2(size_t idx) const {
             const char * data = (const char *) m_label.data();
@@ -401,36 +431,8 @@ namespace glad {
             return str;
         }
         
-        /* build string from node v_from upwards to node v_to */
-        /*
-        std::string build_string(size_t v_from, size_t v_to) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = v_from;
-            size_t i, o;
-            bool b = true; // starting node is assumpted to be true... 
-            std::string lab;
-            for ( b = true; v != v_to ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                if ( !b && o-i > 1 ) {
-                    lab.assign(data+i, o-i-1);
-                    str = std::move(lab) + str;
-                }
-                if ( b ) {
-                    lab.assign(data+i, o-i);
-                    str = std::move(lab) + str;
-                }
-                b = m_helper[node_id(v)-1];
-                v = parent(v);
-            }
-            //TODO here assumption that first node has only one character...
-            if ( b ) str = *(data)+str;
-            return str;
-        }*/
-        
         D ( __attribute__((noinline)) )
-        t_range prefix_range(const size_t& v) const {
+        t_range prefix_range(const int64_t& v) const {
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
@@ -444,7 +446,7 @@ namespace glad {
         
         /* actually this kind of "blind search" is useful if a string is not represented in the tst */
         D ( __attribute__((noinline)) )
-        int64_t blind_search(const string& prefix) const {
+        int64_t blind_search2(const string& prefix) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
@@ -478,7 +480,37 @@ namespace glad {
         
         /* actually this kind of "blind search" is useful if a string is not represented in the tst */
         D ( __attribute__((noinline)) )
-        int64_t blind_search2(const string& prefix) const {
+        int64_t blind_search(const string& prefix, string& str) const {
+            int64_t v = 0, i = 0;
+            const char * data = (const char *) m_label.data();
+            const size_t pref_len = prefix.size();
+            size_t plen, start, end, llen;
+            while ( i != pref_len && v >= 0 ) {
+                plen  = pref_len-i;
+                start = get_start_label(v);
+                end   = get_end_label(v);
+                llen  = end-start;
+                for ( int k = 0; k < llen && k < plen; k++ )
+                    str[i+k] = data[start+k];
+                if ( plen < llen )
+                    break;
+                i += llen-1;
+                v = map_to_edge(v, prefix.at(i), data[end-1]);
+                i += (prefix.at(i) == data[end-1]);
+            }
+            /* here I have to match if the string is correct... */
+            if ( v > 0 && prefix.compare(str) == 0 ) {
+                /* save the prefix from the root upt to the father... */
+                for ( ; plen != 0 && llen != 0 ; plen--, llen-- )
+                    str.pop_back();
+                return v;
+            }
+            return -1;
+        }
+        
+        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
+        D ( __attribute__((noinline)) )
+        int64_t blind_search(const string& prefix) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
@@ -498,15 +530,14 @@ namespace glad {
                 i += (prefix.at(i) == data[end-1]);
             }
             /* here I have to match if the string is correct... */
-            if ( v > 0 && prefix.compare(str) != 0 ) {
-                //DEBUG_STDOUT("Error in comparing: " << str << " with " << prefix << endl);
-                return -1;
+            if ( v > 0 && prefix.compare(str) == 0 ) {
+                /* save the prefix from the root upt to the father... */
+                for ( ; plen != 0 && llen != 0 ; plen--, llen-- )
+                    str.pop_back();
+                //myprefix.assign(str); //it's private!
+                return v;
             }
-            /* if I don't build the string during the downward traversal I have to build it again... */
-            //if ( v > 0 && build_string(v,0).find(prefix) != 0 )
-            //    return -1;
-            
-            return v;
+            return -1;
         }
         
         /* complete search */
