@@ -40,18 +40,20 @@ int main(int argc, char *argv[]) {
         std::cerr << "please, build it before calling this test" << std::endl;
         exit(EXIT_FAILURE);
     }
-    
     double total_us = 0;
     size_t found = 0;
     auto start = chrono::high_resolution_clock::now();
+    
     for ( auto& prefix : prefixes ) {
+        
         auto query_start = chrono::high_resolution_clock::now(); 
         auto result_list = index.top_k(prefix, k);
         auto query_time  = chrono::high_resolution_clock::now() - query_start;
         auto query_us    = chrono::duration_cast<chrono::microseconds>(query_time).count();
         total_us        += query_us;
         found           += result_list.size();
-    }
+        
+    } 
     auto end = chrono::high_resolution_clock::now();
     auto average = total_us/prefixes.size();
     
