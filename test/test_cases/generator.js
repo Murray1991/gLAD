@@ -1,5 +1,5 @@
 
-var new_file = "medium_queries.txt";
+var new_file = "medium_half_queries.txt";
 var num_lines = 2126355;
 var thresh = 2000000;
 
@@ -15,6 +15,11 @@ var lineReader = require('readline').createInterface({
 var fs = require('fs');
 lineReader.on('line', function (line) {
     if ( random() > thresh ) {
-        fs.appendFile(new_file, line+"\n");
+        var str = line;
+        var size = str.length;
+        if ( size > 1 )
+            size = size/2;
+        var newstr = str.substring(0,size);
+        fs.appendFile(new_file, newstr+"\n");
     }
 });
