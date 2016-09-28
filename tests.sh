@@ -24,7 +24,12 @@ SUF1="1.sdsl"
 SUF2="2.sdsl"
 
 #profile the tests...
-#$PERF1 
-$BIN1 $QUER $FILE.$SUF1
-#$PERF2 
-$BIN2 $QUER $FILE.$SUF2
+#$PERF1 $BIN1 $QUER $FILE.$SUF1
+#$PERF2 $BIN2 $QUER $FILE.$SUF2
+
+#perf stat
+PERF_OPTS_STAT="-e instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses "
+PERF_STAT="perf stat"
+
+$PERF_STAT $PERF_OPTS_STAT $BIN1 $QUER $FILE.$SUF1
+$PERF_STAT $PERF_OPTS_STAT $BIN2 $QUER $FILE.$SUF2
