@@ -358,28 +358,6 @@ namespace glad {
             return m_helper[node_id(v)-1];
         }
         
-        D ( __attribute__((noinline)) )
-        std::string build_string(size_t idx) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = m_bp_sel10(idx+1)-1;
-            size_t i, o, p;
-            bool b = true;
-            #pragma ivdep
-            for ( b = true; v != 0 ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                std::string lab(data+i, o - i - !b);
-                str = std::move(lab) + str;
-                p = parent(v);
-                b = check_if_eqnode(v);
-                v = p;
-            }
-            //TODO here assumption that first node has only one character...
-            if ( b ) str = *(data)+str;
-            return str;
-        }
-        
         /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
         D ( __attribute__((noinline)) )
         std::string build_string(size_t v_from, size_t v_to) const {
@@ -388,7 +366,7 @@ namespace glad {
             size_t v = v_from;
             size_t i, o, p;
             bool b = true;
-            #pragma ivdep
+            
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
@@ -398,57 +376,6 @@ namespace glad {
                 b = check_if_eqnode(v);               //check if this node for the parent is the eqnode
                 v = p;                                //go up!
             }
-            return str;
-        }
-        
-        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
-        D ( __attribute__((noinline)) )
-        std::string build_stringXX(size_t v_from, size_t v_to) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = v_from;
-            size_t i, o, p;
-            bool b = true;
-            #pragma ivdep
-            for ( b = true; v != v_to ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                std::string lab(data+i, o - i - !b);
-                str = std::move(lab) + str;
-                p = parent(v);
-                b = check_if_eqnode(v);
-                v = p;
-            }
-            //TODO is it okay? MUMBLE MUMBLE
-            if ( b ) str = *(data+get_start_label(v))+str;
-            return str;
-        }
-        
-        D ( __attribute__((noinline)) )
-        std::string build_string2(size_t idx) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = m_bp_sel10(idx+1)-1;
-            size_t i, o, p;
-            bool b = true;
-            std::string lab;
-            for ( b = true; v != 0 ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                if ( !b && o-i > 1 ) {
-                    lab.assign(data+i, o-i-1);
-                    str = std::move(lab) + str;
-                }
-                if ( b ) {
-                    lab.assign(data+i, o-i);
-                    str = std::move(lab) + str;
-                }
-                p = parent(v);
-                b = check_if_eqnode(v,p);
-                v = p;
-            }
-            //TODO here assumption that first node has only one character...
-            if ( b ) str = *(data)+str;
             return str;
         }
         
@@ -463,40 +390,6 @@ namespace glad {
             int64_t v = blind_search(prefix);
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
-        }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
-        D ( __attribute__((noinline)) )
-        int64_t blind_search2(const string& prefix) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            
-            string str (prefix.size(), 0);
-            size_t plen  = pref_len-i;
-            size_t start = get_start_label(v);
-            size_t end   = get_end_label(v);
-            size_t llen  = end-start;
-            #pragma ivdep
-            for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
-            while ( plen >= llen && i != pref_len && v >= 0 ) {
-                i     += llen-1;
-                v     = map_to_edge(v, prefix.at(i), data[end-1]);
-                i     += (prefix.at(i) == data[end-1]);
-                plen  = pref_len-i;
-                start = get_start_label(v);
-                end   = get_end_label(v);
-                llen  = end-start;
-                #pragma ivdep
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
-            }
-            /* here I have to match if the string is correct... */
-            if ( v > 0 && prefix.compare(str) != 0 ) {
-                return -1;
-            }
-            return v;
         }
         
         /* actually this kind of "blind search" is useful if a string is not represented in the tst */
@@ -532,68 +425,6 @@ namespace glad {
                 for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) // probably not so much efficient
                     str.pop_back();
                 //std::cout << "saved string: " << str << endl;
-                return v;
-            }
-            return -1;
-        }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
-        D ( __attribute__((noinline)) )
-        int64_t blind_searchX(const string& prefix, string& str) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            size_t plen, start, end, llen;
-            while ( i != pref_len && v >= 0 ) {
-                plen  = pref_len-i;
-                start = get_start_label(v);
-                end   = get_end_label(v);
-                llen  = end-start;
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
-                if ( plen < llen )
-                    break;
-                i += llen-1;
-                v = map_to_edge(v, prefix.at(i), data[end-1]);
-                i += (prefix.at(i) == data[end-1]);
-            }
-            /* here I have to match if the string is correct... */
-            if ( v > 0 && prefix.compare(str) == 0 ) {
-                /* save the prefix from the root upt to the father... */
-                for ( ; plen != 0 && llen != 0 ; plen--, llen-- )
-                    str.pop_back();
-                return v;
-            }
-            return -1;
-        }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
-        D ( __attribute__((noinline)) )
-        int64_t blind_search(const string& prefix) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            size_t plen, start, end, llen;
-            string str(prefix.size(), 0);
-            while ( i != pref_len && v >= 0 ) {
-                plen  = pref_len-i;
-                start = get_start_label(v);
-                end   = get_end_label(v);
-                llen  = end-start;
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
-                if ( plen < llen )
-                    break;
-                i += llen-1;
-                v = map_to_edge(v, prefix.at(i), data[end-1]);
-                i += (prefix.at(i) == data[end-1]);
-            }
-            /* here I have to match if the string is correct... */
-            if ( v > 0 && prefix.compare(str) == 0 ) {
-                /* save the prefix from the root upt to the father... */
-                for ( ; plen != 0 && llen != 0 ; plen--, llen-- )
-                    str.pop_back();
-                //myprefix.assign(str); //it's private!
                 return v;
             }
             return -1;
