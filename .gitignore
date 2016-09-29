@@ -3,7 +3,9 @@ build/
 ./*.txt
 sdsl/
 enwiki-20160601-all-titles*
+*.sdsl
 DatasetsProject/
 perf*
 perf/
 *.txt
+
