@@ -34,7 +34,8 @@ namespace glad {
         t_label             m_label;
         t_weight            m_weight;
         t_bv_uc             m_bp;
-        t_bv                m_helper;
+        t_bv                m_helper0;
+        t_bv                m_helper1;
         t_bp_support        m_bp_support;
         t_bv                m_start_bv;
         t_sel               m_start_sel;
@@ -88,19 +89,6 @@ namespace glad {
         
     public:    
         
-        /*D ( __attribute__((noinline)) )
-        tVPSU top_k (std::string prefix, size_t k) const {
-            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
-            auto range = prefix_range(prefix);
-            auto top_idx = heaviest_indexes(range, k);
-            tVPSU result_list;
-            for (auto idx : top_idx){
-                auto str = build_string(idx);
-                result_list.push_back(tPSU(std::move(str), m_weight[idx]));
-            }
-            return result_list;
-        } */
-        
         D ( __attribute__((noinline)) )
         tVPSU top_k (std::string prefix, size_t k) const {
             constexpr size_t g = 5; // "guess" constant multiplier
@@ -141,7 +129,7 @@ namespace glad {
                 size_in_bytes(m_start_sel) +
                 size_in_bytes(m_weight) +
                 size_in_bytes(m_rmq) +
-                size_in_bytes(m_helper);
+                size_in_bytes(m_helper0);
             return size;
         }
         
@@ -149,19 +137,22 @@ namespace glad {
         
         sdsl::bit_vector::iterator bp_it;
         sdsl::bit_vector::iterator start_it;
-        sdsl::bit_vector::iterator helper_it;
+        sdsl::bit_vector::iterator helper0_it;
+        sdsl::bit_vector::iterator helper1_it;
         sdsl::int_vector<8>::iterator label_it;
         
         void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
             t_bv_uc                   start_bv(2*N+n+2, 0);
-            t_bv_uc                   helper(n+N,0);
+            t_bv_uc                   helper0(n+N,0);
+            t_bv_uc                   helper1(n+N,0);
             int_vector<8> labels      = int_vector<8>(n);
             m_bp                      = t_bv_uc(2*2*N, 0);
             
             bp_it                     = m_bp.begin();
             start_it                  = start_bv.begin();
             label_it                  = labels.begin();
-            helper_it                 = helper.begin();
+            helper0_it                = helper0.begin();
+            helper1_it                = helper1.begin();
             *(start_it++) = 1;
             
             tnode * root  = build_tst(strings);
@@ -170,12 +161,14 @@ namespace glad {
             DEBUG_STDOUT("-- resizing...\n");
             m_bp.resize(bp_it-m_bp.begin()); 
             labels.resize(label_it-labels.begin()); 
-            helper.resize(helper_it-helper.begin());
+            helper0.resize(helper0_it-helper0.begin());
+            helper1.resize(helper1_it-helper1.begin());
             start_bv.resize(start_it-start_bv.begin());
             
             DEBUG_STDOUT("-- building data structures...\n");
             m_start_bv   = t_bv(start_bv);
-            m_helper     = t_bv(helper);
+            m_helper0    = t_bv(helper0);
+            m_helper1    = t_bv(helper1);
             m_label      = t_label(labels);
             m_start_sel  = t_sel(&m_start_bv);
             m_bp_support = t_bp_support(&m_bp);
@@ -256,8 +249,11 @@ namespace glad {
                 if ( level < target_level ) {
 
                     //TODO check!
-                    if ( ! node->is_leaf() )
-                        *(helper_it++)  = ( node->lonode != nullptr );
+                    if ( ! node->is_leaf() ) {
+                        *helper0_it = node->eqnode && ( (node->lonode != 0) != (node->hinode != 0 ) );
+                        *helper1_it = *helper0_it ? (node->lonode != 0) : (node->lonode && node->eqnode && node->hinode);
+                        helper0_it++; helper1_it++;
+                    }
 
                 }
             }
@@ -270,8 +266,11 @@ namespace glad {
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
 
             //TODO check!
-            if ( !node->is_leaf() )
-                *(helper_it++) = ( node->lonode != nullptr );
+            if ( ! node->is_leaf() ) {
+                *helper0_it = node->eqnode && ( (node->lonode != 0) != (node->hinode != 0 ) );
+                *helper1_it = *helper0_it ? (node->lonode != 0) : (node->lonode && node->eqnode && node->hinode);
+                helper0_it++; helper1_it++;
+            }
 
             *(start_it++)   = 1;
             *(bp_it++)      = 1;
@@ -329,21 +328,25 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
-            //problem here: children(v) calls find_close
-            auto nodes = children(v);
-            auto out_size = nodes.size();
-            auto d = m_bp_rnk10(v+1);
-            auto h = m_helper[node_id(v)-1-d];
-            //cout << "map_to_edge: " << v << " ( " << nodes << " ) ; id:" << node_id(v) << " ; " << ch1 << " ; " << ch2 << " ; h=" << h << " ; d=" << d << endl;
-            if (out_size == 3)
-                return nodes[ (ch1==ch2) + (ch1>ch2)*2 ];
-            else if (out_size == 2 && h == 1 && ch1 <= ch2)
-                return nodes[ch1==ch2];
-            else if (out_size == 2 && h == 0 && ch1 >= ch2)
-                return nodes[ch1>ch2];
-            else if (out_size == 1 && ch1 == ch2)
-                return nodes[0];
-            else if (out_size == 0 && ch1 == ch2 )
+            auto idx = node_id(v)-m_bp_rnk10(v+1)-1;
+            auto h0 = m_helper0[idx];
+            auto h1 = m_helper1[idx];
+            size_t cv = v+1;
+            if ( !h0 && h1 ) {          //case of 3 children
+                for ( int i=0; i < (ch1==ch2)+(ch1>ch2)*2; i++ )
+                    cv = m_bp_support.find_close(cv)+1;
+                return cv;
+            } else if ( h0 && h1 && ch1 <= ch2) {    //case of 2 children with lonode
+                for ( int i=0; i < (ch1==ch2); i++ )
+                    cv = m_bp_support.find_close(cv)+1;
+                return cv;
+            } else if ( h0 && !h1 && ch1 >= ch2 ) {   //case of 2 children with hinode
+                for ( int i=0; i < (ch1>ch2); i++ )
+                    cv = m_bp_support.find_close(cv)+1;
+                return cv;
+            } else if ( !h0 && !h1 && m_bp[cv] && ch1 == ch2 ) {    //case of 1 child
+                return cv;
+            } else if ( !h0 && !h1 && !m_bp[cv] && ch1 == ch2 )    //case is a leaf
                 return v;
             return -1;
         }
@@ -381,43 +384,24 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         bool check_if_eqnode(const size_t v, const size_t p) const {
-            auto nodes = children(p);
-            auto d = m_bp_rnk10(p+1); // cout << (node_id(p)-1
-            auto h = m_helper[node_id(p)-1-d];
+            auto idx = node_id(p)-m_bp_rnk10(p+1)-1;
+            auto h0 = m_helper0[idx];
+            auto h1 = m_helper1[idx];
+            size_t cv = p+1;
             //cout << "check: v=" << v << " ; p=" << p << " ( " << nodes << " ) ; id:" << node_id(v)  << " ; h=" << h << " ; d=" << d << endl;
-            if (nodes.size() == 3)
-                return nodes[1] == v;
-            else if (nodes.size() == 2 && h == 1)
-                return nodes[1] == v;
-            else if (nodes.size() == 2 && h == 0)
-                return nodes[0] == v;
-            else if (nodes.size() == 1)
-                return nodes[0] == v;
+            if (!h0 && h1) {
+                cv = m_bp_support.find_close(cv)+1;
+                return cv == v;
+            } else if (h0 && h1) {
+                cv = m_bp_support.find_close(cv)+1;
+                return cv == v;
+            } else if (h0 && !h1)
+                return cv == v;
+            else if (!h0 && !h1 && m_bp[cv])
+                return cv == v;
             DEBUG_STDERR("ALARM ALARM ALARM\n");
             exit(EXIT_FAILURE);
             return false;
-        }
-        
-        D ( __attribute__((noinline)) )
-        std::string build_string(size_t idx) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = m_bp_sel10(idx+1)-1;
-            size_t i, o, p;
-            bool b = true;
-            #pragma ivdep
-            for ( b = true; v != 0 ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                std::string lab(data+i, o - i - !b);
-                str = std::move(lab) + str;
-                p = parent(v);
-                b = check_if_eqnode(v,p);
-                v = p;
-            }
-            //TODO here assumption that first node has only one character...
-            if ( b ) str = *(data)+str;
-            return str;
         }
         
         /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
@@ -428,7 +412,6 @@ namespace glad {
             size_t v = v_from;
             size_t i, o, p;
             bool b = true;
-            #pragma ivdep
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
@@ -587,7 +570,8 @@ namespace glad {
             written_bytes += m_start_sel.serialize(out, child, "start_sel");
             written_bytes += m_weight.serialize(out, child, "weight");
             written_bytes += m_rmq.serialize(out, child, "rmq");
-            written_bytes += m_helper.serialize(out, child, "helper");
+            written_bytes += m_helper0.serialize(out, child, "helper");
+            written_bytes += m_helper1.serialize(out, child, "helper1");
             structure_tree::add_size(child, written_bytes);
             return written_bytes;
         }
@@ -602,7 +586,8 @@ namespace glad {
             m_start_sel.load(in,&m_start_bv);
             m_weight.load(in);
             m_rmq.load(in);
-            m_helper.load(in);
+            m_helper0.load(in);
+            m_helper1.load(in);
         }
     };
 }
