@@ -11,6 +11,10 @@
     #include "tst2.hpp"
 #endif
 
+#ifdef TST3
+    #include "tst3.hpp"
+#endif
+
 using namespace std;
 using namespace glad;
 
