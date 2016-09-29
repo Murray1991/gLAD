@@ -398,28 +398,6 @@ namespace glad {
             return false;
         }
         
-        D ( __attribute__((noinline)) )
-        std::string build_string(size_t idx) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = m_bp_sel10(idx+1)-1;
-            size_t i, o, p;
-            bool b = true;
-            #pragma ivdep
-            for ( b = true; v != 0 ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                std::string lab(data+i, o - i - !b);
-                str = std::move(lab) + str;
-                p = parent(v);
-                b = check_if_eqnode(v,p);
-                v = p;
-            }
-            //TODO here assumption that first node has only one character...
-            if ( b ) str = *(data)+str;
-            return str;
-        }
-        
         /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
         D ( __attribute__((noinline)) )
         std::string build_string(size_t v_from, size_t v_to) const {
