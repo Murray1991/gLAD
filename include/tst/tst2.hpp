@@ -108,7 +108,7 @@ namespace glad {
             std::string new_prefix(prefix.size(), 0);
             auto v       = blind_search(prefix, new_prefix);
             auto range   = prefix_range(v);
-            auto top_idx = heaviest_indexes(range, k);
+            auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
             tVPSU result_list;
             for (auto idx : top_idx){
                 std::string s(g*prefix.size(), 0);
@@ -255,7 +255,9 @@ namespace glad {
                 // put this if at the end, should be safe...
                 if ( level < target_level ) {
 
-                    *(helper_it++)  = ( node->lonode != nullptr );
+                    //TODO check!
+                    if ( ! node->is_leaf() )
+                        *(helper_it++)  = ( node->lonode != nullptr );
 
                 }
             }
@@ -267,7 +269,9 @@ namespace glad {
                 return;
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
 
-            *(helper_it++) = ( node->lonode != nullptr );
+            //TODO check!
+            if ( !node->is_leaf() )
+                *(helper_it++) = ( node->lonode != nullptr );
 
             *(start_it++)   = 1;
             *(bp_it++)      = 1;
@@ -328,7 +332,9 @@ namespace glad {
             //problem here: children(v) calls find_close
             auto nodes = children(v);
             auto out_size = nodes.size();
-            auto h = m_helper[node_id(v)-1];
+            auto d = m_bp_rnk10(v+1);
+            auto h = m_helper[node_id(v)-1-d];
+            //cout << "map_to_edge: " << v << " ( " << nodes << " ) ; id:" << node_id(v) << " ; " << ch1 << " ; " << ch2 << " ; h=" << h << " ; d=" << d << endl;
             if (out_size == 3)
                 return nodes[ (ch1==ch2) + (ch1>ch2)*2 ];
             else if (out_size == 2 && h == 1 && ch1 <= ch2)
@@ -376,7 +382,9 @@ namespace glad {
         D ( __attribute__((noinline)) )
         bool check_if_eqnode(const size_t v, const size_t p) const {
             auto nodes = children(p);
-            auto h = m_helper[node_id(p)-1];
+            auto d = m_bp_rnk10(p+1); // cout << (node_id(p)-1
+            auto h = m_helper[node_id(p)-1-d];
+            //cout << "check: v=" << v << " ; p=" << p << " ( " << nodes << " ) ; id:" << node_id(v)  << " ; h=" << h << " ; d=" << d << endl;
             if (nodes.size() == 3)
                 return nodes[1] == v;
             else if (nodes.size() == 2 && h == 1)
@@ -424,14 +432,12 @@ namespace glad {
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
-                std::string lab(data+i, o - i - !b);
+                std::string lab(data+i, o - i - !b);    //at the beginning is true => start from a leaf!
                 str = std::move(lab) + str;
                 p = parent(v);
-                b = check_if_eqnode(v,p);
-                v = p;
+                b = check_if_eqnode(v,p);               //check if this node for the parent is the eqnode
+                v = p;                                  //go up!
             }
-            //TODO is it okay? MUMBLE MUMBLE
-            if ( b ) str = *(data+get_start_label(v))+str;
             return str;
         }
         
@@ -454,38 +460,7 @@ namespace glad {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
-            size_t plen, start, end, llen;
-            while ( i != pref_len && v >= 0 ) {
-                plen  = pref_len-i;
-                start = get_start_label(v);
-                end   = get_end_label(v);
-                llen  = end-start;
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
-                if ( plen < llen )
-                    break;
-                i += llen-1;
-                v = map_to_edge(v, prefix.at(i), data[end-1]);
-                i += (prefix.at(i) == data[end-1]);
-            }
-            /* here I have to match if the string is correct... */
-            if ( v > 0 && prefix.compare(str) == 0 ) {
-                /* save the prefix from the root upt to the father... */
-                for ( ; plen != 0 && llen != 0 ; plen--, llen-- )
-                    str.pop_back();
-                return v;
-            }
-            return -1;
-        }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
-        D ( __attribute__((noinline)) )
-        int64_t blind_search2(const string& prefix) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            
-            string str (prefix.size(), 0);
+            //string str (prefix.size(), 0);
             size_t plen  = pref_len-i;
             size_t start = get_start_label(v);
             size_t end   = get_end_label(v);
@@ -496,6 +471,7 @@ namespace glad {
             while ( plen >= llen && i != pref_len && v >= 0 ) {
                 i     += llen-1;
                 v     = map_to_edge(v, prefix.at(i), data[end-1]);
+                if ( v < 0 ) return v;  //TODO removing this should reduce possible branch mispredictions 
                 i     += (prefix.at(i) == data[end-1]);
                 plen  = pref_len-i;
                 start = get_start_label(v);
@@ -505,39 +481,13 @@ namespace glad {
                 for ( int k = 0; k < llen && k < plen; k++ )
                     str[i+k] = data[start+k];
             }
-            /* here I have to match if the string is correct... */
-            if ( v > 0 && prefix.compare(str) != 0 ) {
-                return -1;
+            /* match if string is correct and save it */
+            if ( v > 0 && prefix.compare(str) == 0 ) {
+                for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) // probably not so much efficient
+                    str.pop_back();
+                return v;
             }
-            return v;
-        }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
-        D ( __attribute__((noinline)) )
-        int64_t blind_search(const string& prefix) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            size_t plen, start, end, llen;
-            string str(prefix.size(), 0);
-            while ( i != pref_len && v >= 0 ) {
-                plen  = pref_len-i;
-                start = get_start_label(v);
-                end   = get_end_label(v);
-                llen  = end-start;
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
-                if ( plen < llen )
-                    break;
-                i += llen-1;
-                v = map_to_edge(v, prefix.at(i), data[end-1]);
-                i += (prefix.at(i) == data[end-1]);
-            }
-            // here I have to match if the string is correct... 
-            if ( v > 0 && prefix.compare(str) != 0 ) {
-                return -1;
-            }
-            return v;
+            return -1;
         }
         
         /* complete search */

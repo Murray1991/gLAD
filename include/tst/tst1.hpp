@@ -392,6 +392,27 @@ namespace glad {
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
+                std::string lab(data+i, o - i - !b);    //at the beginning is true => start from a leaf!
+                str = std::move(lab) + str;
+                p = parent(v);
+                b = check_if_eqnode(v);               //check if this node for the parent is the eqnode
+                v = p;                                //go up!
+            }
+            return str;
+        }
+        
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
+        D ( __attribute__((noinline)) )
+        std::string build_stringXX(size_t v_from, size_t v_to) const {
+            const char * data = (const char *) m_label.data();
+            std::string str = "";
+            size_t v = v_from;
+            size_t i, o, p;
+            bool b = true;
+            #pragma ivdep
+            for ( b = true; v != v_to ; ) {
+                i = get_start_label(v);
+                o = get_end_label(v);
                 std::string lab(data+i, o - i - !b);
                 str = std::move(lab) + str;
                 p = parent(v);
@@ -481,6 +502,44 @@ namespace glad {
         /* actually this kind of "blind search" is useful if a string is not represented in the tst */
         D ( __attribute__((noinline)) )
         int64_t blind_search(const string& prefix, string& str) const {
+            int64_t v = 0, i = 0;
+            const char * data = (const char *) m_label.data();
+            const size_t pref_len = prefix.size();
+            //string str (prefix.size(), 0);
+            size_t plen  = pref_len-i;
+            size_t start = get_start_label(v);
+            size_t end   = get_end_label(v);
+            size_t llen  = end-start;
+            #pragma ivdep
+            for ( int k = 0; k < llen && k < plen; k++ )
+                    str[i+k] = data[start+k];
+            while ( plen >= llen && i != pref_len && v >= 0 ) {
+                i     += llen-1;
+                v     = map_to_edge(v, prefix.at(i), data[end-1]);
+                if ( v < 0 ) return v;  //TODO is it possible to optimize?
+                i     += (prefix.at(i) == data[end-1]);
+                plen  = pref_len-i;
+                start = get_start_label(v); //TODO adjust here without additional if in the code... if takes -1 : bordello
+                end   = get_end_label(v);
+                llen  = end-start;
+                #pragma ivdep
+                for ( int k = 0; k < llen && k < plen; k++ )
+                    str[i+k] = data[start+k];
+            }
+            /* here I have to match if the string is correct... */
+            if ( v > 0 && prefix.compare(str) == 0 ) {
+                /* save the prefix from the root up to the father... */
+                for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) // probably not so much efficient
+                    str.pop_back();
+                //std::cout << "saved string: " << str << endl;
+                return v;
+            }
+            return -1;
+        }
+        
+        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
+        D ( __attribute__((noinline)) )
+        int64_t blind_searchX(const string& prefix, string& str) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
