@@ -16,6 +16,10 @@
     const char * type = "2";
 #endif
 
+#ifdef TST3
+    #include "tst3.hpp"
+    const char * type = "3";
+#endif
 using namespace std;
 using namespace chrono;
 
