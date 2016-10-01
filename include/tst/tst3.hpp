@@ -5,6 +5,7 @@
 #include <utility>
 #include <tuple>
 #include <cassert>
+#include <cstring>
 #include <sdsl/vectors.hpp>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/bp_support.hpp>
@@ -99,18 +100,13 @@ namespace glad {
             auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
             tVPSU result_list;
             for (auto idx : top_idx){
-                std::string s(g*prefix.size(), 0);
+                std::string s;
+                s.reserve(g*prefix.size());
                 s += new_prefix;
                 s += std::move( build_string(m_bp_sel10(idx+1)-1, parent(v)) );
                 result_list.push_back(tPSU(std::move(s), m_weight[idx]));
             }
             return result_list;
-        }
-        
-        D ( __attribute__((noinline)) )
-        bool lookup(string prefix) const {
-            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
-            return search(prefix) > 0;
         }
         
         D ( __attribute__((noinline)) )
@@ -327,32 +323,62 @@ namespace glad {
         }
         
         D ( __attribute__((noinline)) )
-        int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
-            auto idx = node_id(v)-m_bp_rnk10(v+1)-1;
-            auto h0 = m_helper0[idx];
-            auto h1 = m_helper1[idx];
+        int64_t map_to_edge(const size_t v, const uint8_t ch1, const uint8_t ch2) const {
+            const size_t idx = node_id(v)-m_bp_rnk10(v+1)-1;
+            const bool h0 = m_helper0[idx];
+            const bool h1 = m_helper1[idx];
+            const bool nl = m_bp[v+1];                                      // true if v is not a leaf
+            const size_t cv = v+1;
+            int64_t retval = 0;
+            
+            auto l3  = !h0 && h1 && nl;                                     //(1) case 3 children
+            auto l2a = h0 && h1 && nl && ch1 <= ch2;                        //(2) case 2 children with lonode
+            auto l2b = h0 && !h1 && nl && ch1 >= ch2;                       //(3) case 2 children with hinode
+            auto l1  = !h0 && !h1 && nl && ch1 == ch2;                      //(4) case 1 children
+            auto l0  = !h0 && !h1 && !nl && ch1 == ch2;                     //(5) case leaf
+            auto l23 = l3 || l2a || l2b;
+            auto len = ( l3 && ch1 == ch2 ) + ( l3 && ch1>ch2 )*2 + \
+                       ( l2a && ch1 == ch2 ) + \
+                       ( l2b && ch1 > ch2 );                                //redundant, just for "clarity"
+                       
+            retval += (!l23 && !l0 && !l1)*(-1);                            //case no mapping
+            retval += (l23 || l1)*cv;                                       //cv for (1) (2) (3) (4)
+            retval += (l0)*v;                                               //v for l0
+            
+            /* here we go: for-loop is not executed if !l23 */
+            for ( int i = 0; i < len; i++ )
+                retval = m_bp_support.find_close(retval)+1;
+            return retval;
+        }
+        
+        D ( __attribute__((noinline)) )
+        int64_t map_to_edge2(const size_t v, const uint8_t ch1, const uint8_t ch2) const {
+            const size_t idx = node_id(v)-m_bp_rnk10(v+1)-1;
+            const size_t h0 = m_helper0[idx];
+            const size_t h1 = m_helper1[idx];
             size_t cv = v+1;
-            if ( !h0 && h1 ) {          //case of 3 children
+            size_t n = m_bp[v+1];       // check if leaf...          
+            if ( !h0 && h1 && n ) {          //case of 3 children
                 for ( int i=0; i < (ch1==ch2)+(ch1>ch2)*2; i++ )
                     cv = m_bp_support.find_close(cv)+1;
                 return cv;
-            } else if ( h0 && h1 && ch1 <= ch2) {    //case of 2 children with lonode
+            } else if ( h0 && h1 && n && ch1 <= ch2) {    //case of 2 children with lonode
                 for ( int i=0; i < (ch1==ch2); i++ )
                     cv = m_bp_support.find_close(cv)+1;
                 return cv;
-            } else if ( h0 && !h1 && ch1 >= ch2 ) {   //case of 2 children with hinode
+            } else if ( h0 && !h1 && n && ch1 >= ch2 ) {   //case of 2 children with hinode
                 for ( int i=0; i < (ch1>ch2); i++ )
                     cv = m_bp_support.find_close(cv)+1;
                 return cv;
-            } else if ( !h0 && !h1 && m_bp[cv] && ch1 == ch2 ) {    //case of 1 child
+            } else if ( !h0 && !h1 && n && ch1 == ch2 ) {    //case of 1 child
                 return cv;
-            } else if ( !h0 && !h1 && !m_bp[cv] && ch1 == ch2 )    //case is a leaf
+            } else if ( !h0 && !h1 && !n && ch1 == ch2 )    //case is a leaf
                 return v;
             return -1;
         }
 
         D ( __attribute__((noinline)) )
-        std::vector<size_t> heaviest_indexes( t_range& range, size_t k ) const {
+        std::vector<size_t> heaviest_indexes( const t_range& range, const size_t k ) const {
             typedef std::tuple<t_range, size_t, size_t> t_q;
             auto cmp = [](const t_q& a, const t_q& b) { 
                 return get<2>(a) < get<2>(b); 
@@ -384,34 +410,83 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         bool check_if_eqnode(const size_t v, const size_t p) const {
-            auto idx = node_id(p)-m_bp_rnk10(p+1)-1;
-            auto h0 = m_helper0[idx];
-            auto h1 = m_helper1[idx];
-            size_t cv = p+1;
-            //cout << "check: v=" << v << " ; p=" << p << " ( " << nodes << " ) ; id:" << node_id(v)  << " ; h=" << h << " ; d=" << d << endl;
-            if (!h0 && h1) {
-                cv = m_bp_support.find_close(cv)+1;
-                return cv == v;
-            } else if (h0 && h1) {
-                cv = m_bp_support.find_close(cv)+1;
-                return cv == v;
-            } else if (h0 && !h1)
-                return cv == v;
-            else if (!h0 && !h1 && m_bp[cv])
-                return cv == v;
-            DEBUG_STDERR("ALARM ALARM ALARM\n");
-            exit(EXIT_FAILURE);
-            return false;
+            const size_t idx = node_id(p)-m_bp_rnk10(p+1)-1;
+            const size_t h0 = m_helper0[idx];
+            const size_t h1 = m_helper1[idx];
+            const size_t cv = p+1;
+            
+            return ( ( !h1 && ( h0 || m_bp[cv] ) && cv == v ) || \
+                     ( h1 && m_bp_support.find_close(cv)+1 == v ));
+        }
+        
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
+        /* attempt to optimization... should be better than previous solution... */
+        D ( __attribute__((noinline)) )
+        std::string build_string(const size_t v_from, const size_t v_to) const {
+            const char * data = (const char *) m_label.data();
+            std::vector<bool> b; b.reserve(50);    // "guess size"
+            std::vector<size_t> v; v.reserve(50);    //"guess size"
+            v.push_back(0);
+            b.push_back(true);
+            for ( size_t k = v_from ; k != v_to ; ) {
+                auto p = parent(k);
+                v.push_back(k);
+                b.push_back(check_if_eqnode(k, p));
+                k = p;
+            }
+            std::string str; 
+            str.reserve(100); //guess
+            size_t start, end;
+            const size_t last = v.size()-1;
+            for ( size_t i = last; i > 0; i-- ) {
+                start   =  get_start_label(v[i]);
+                end     =  get_end_label(v[i]);
+                str.append(data + start, end - start - !b[i-1]);
+            }
+            return str;
+        }
+        
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
+        /* attempt to optimization... should be better than previous solution... */
+        D ( __attribute__((noinline)) )
+        std::string build_string3(const size_t v_from, const size_t v_to) const {
+            const char * data = (const char *) m_label.data();
+            std::vector<bool> b; b.reserve(50);    // "guess size"
+            std::vector<size_t> v; v.reserve(50);    //"guess size"
+            v.push_back(0);
+            b.push_back(true);
+            
+            for ( size_t k = v_from; k != v_to; ) {
+                auto p = parent(k);
+                v.push_back(k);
+            }
+            for ( size_t k = v_from ; k != v_to ; ) {
+                auto p = parent(k);
+                v.push_back(k);
+                b.push_back(check_if_eqnode(k, p));
+                k = p;
+            }
+            std::string str; 
+            str.reserve(100); //guess
+            size_t start, end;
+            const size_t last = v.size()-1;
+            for ( size_t i = last; i > 0; i-- ) {
+                start   =  get_start_label(v[i]);
+                end     =  get_end_label(v[i]);
+                str.append(data + start, end - start - !b[i-1]);
+            }
+            return str;
         }
         
         /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
         D ( __attribute__((noinline)) )
-        std::string build_string(size_t v_from, size_t v_to) const {
+        std::string build_string2(size_t v_from, size_t v_to) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
             size_t v = v_from;
             size_t i, o, p;
             bool b = true;
+            //here we have loop-carried dependencies, because of b => TODO optimize!
             for ( b = true; v != v_to ; ) {
                 i = get_start_label(v);
                 o = get_end_label(v);
@@ -443,58 +518,29 @@ namespace glad {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
-            //string str (prefix.size(), 0);
             size_t plen  = pref_len-i;
             size_t start = get_start_label(v);
             size_t end   = get_end_label(v);
             size_t llen  = end-start;
-            #pragma ivdep
-            for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
+            std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
             while ( plen >= llen && i != pref_len && v >= 0 ) {
                 i     += llen-1;
                 v     = map_to_edge(v, prefix.at(i), data[end-1]);
-                if ( v < 0 ) return v;  //TODO removing this should reduce possible branch mispredictions 
+                if ( v < 0 ) return v;  //TODO is it possible to optimize?
                 i     += (prefix.at(i) == data[end-1]);
                 plen  = pref_len-i;
                 start = get_start_label(v);
                 end   = get_end_label(v);
                 llen  = end-start;
-                #pragma ivdep
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
+                std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
             }
-            /* match if string is correct and save it */
+            /* here I have to match if the string is correct... */
             if ( v > 0 && prefix.compare(str) == 0 ) {
-                for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) // probably not so much efficient
+                for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) 
                     str.pop_back();
                 return v;
             }
             return -1;
-        }
-        
-        /* complete search */
-        D ( __attribute__((noinline)) )
-        int64_t search(const string& prefix) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            size_t plen, start, end, llen;
-            while ( i != pref_len && v >= 0 ) {
-                plen = pref_len-i;
-                start = get_start_label(v);
-                end = get_end_label(v);
-                llen = end-start;
-                if ( plen < llen ) {
-                    return ( !prefix.compare(i, plen, data+start, plen) ? v : -1 );
-                }
-                if ( llen > 1 && prefix.compare(i, llen-1, data+start, llen-1) != 0)
-                    return -1;
-                i += llen-1;
-                v = map_to_edge(v, prefix.at(i), data[end-1]);
-                i += (prefix.at(i) == data[end-1]);
-            }
-            return v;
         }
         
         D ( __attribute__((noinline)) )
@@ -503,12 +549,12 @@ namespace glad {
         }
         
         D ( __attribute__((noinline)) )
-        size_t node_id(size_t v) const{
+        size_t node_id(const size_t v) const{
             return m_bp_support.rank(v);
         }
         
         D ( __attribute__((noinline)) )
-        string get_label(size_t v) const {
+        string get_label(const size_t v) const {
             const char * data = (const char *) m_label.data();
             auto i = get_start_label(v);
             auto o = get_end_label(v);
@@ -522,27 +568,27 @@ namespace glad {
         }
         
         D ( __attribute__((noinline)) )
-        size_t get_end_label(size_t v) const {
+        size_t get_end_label(const size_t v) const {
             return m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
         }
         
         D ( __attribute__((noinline)) )
-        size_t is_leaf(size_t v) const {
+        size_t is_leaf(const size_t v) const {
             return m_bp[v+1] == 0;
         }
         
         D ( __attribute__((noinline)) )
-        size_t is_root(size_t v) const {
+        size_t is_root(const size_t v) const {
             return v == 0;
         }
 
         D ( __attribute__((noinline)) )
-        size_t parent(size_t v) const {
+        size_t parent(const size_t v) const {
             return m_bp_support.enclose(v);
         }
         
         D ( __attribute__((noinline)) )
-        std::vector<size_t> children(size_t v) const {
+        std::vector<size_t> children(const size_t v) const {
             std::vector<size_t> res;
             for ( size_t cv = v+1; m_bp[cv]; ) {
                 res.push_back(cv);
