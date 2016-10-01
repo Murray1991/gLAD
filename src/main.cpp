@@ -28,13 +28,13 @@ std::ifstream::pos_type filesize(const string& file) {
     return in.tellg(); 
 }
 
-void query_from_input(glad::tst<>& t) {
+void query_from_input(glad::tst<>& t, int k) {
     cout << "Please enter queries line by line." << endl;
     cout << "Pressing Crtl-D will quit the program." << endl;
     string prefix;
     while ( getline(cin, prefix) ) {
         auto query_start = chrono::high_resolution_clock::now(); 
-        auto result_list = t.top_k(prefix, 5);
+        auto result_list = t.top_k(prefix, k);
         auto query_time  = chrono::high_resolution_clock::now() - query_start;
         auto query_us    = chrono::duration_cast<chrono::microseconds>(query_time).count();
         cout << "-- top results:" << endl;
@@ -52,6 +52,10 @@ int main(int argc, char *argv[]) {
         cerr << "Error: Insert filename\n";
         return 1;
     }
+    
+    int k = 5;
+    if ( argc == 3 )
+        k = atoi(argv[2]);
     const string file = std::string(argv[1]);
     const string index_file = file+"."+type+".sdsl";
     
@@ -76,7 +80,7 @@ int main(int argc, char *argv[]) {
             "nodes: " << t.get_nodes() << "\n" << \
             "space (MB): " << t.get_size()/1000000 << endl;
     
-    query_from_input(t);
+    query_from_input(t, k);
     //queries_at_random(t,file);
     return 0;
 }
