@@ -97,21 +97,16 @@ namespace glad {
             std::string new_prefix(prefix.size(), 0);
             auto v       = blind_search(prefix, new_prefix);
             auto range   = prefix_range(v);
-            auto top_idx = heaviest_indexes(range, k);
+            auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
             tVPSU result_list;
             for (auto idx : top_idx){
-                std::string s(g*prefix.size(), 0);
+                std::string s;
+                s.reserve(g*prefix.size());
                 s += new_prefix;
                 s += std::move( build_string(m_bp_sel10(idx+1)-1, parent(v)) );
                 result_list.push_back(tPSU(std::move(s), m_weight[idx]));
             }
             return result_list;
-        }
-        
-        D ( __attribute__((noinline)) )
-        bool lookup(string prefix) const {
-            std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
-            return search(prefix) > 0;
         }
         
         size_t get_nodes() {
@@ -359,7 +354,33 @@ namespace glad {
         }
         
         /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
+        /* attempt to optimization... should be better than previous solution*/
         D ( __attribute__((noinline)) )
+        std::string build_string(const size_t v_from, const size_t v_to) const {
+            const char * data = (const char *) m_label.data();
+            std::vector<bool> b; b.reserve(50);    //100 is a "guess size"
+            std::vector<size_t> v; v.reserve(50);    //100 is a "guess size"
+            v.push_back(0);
+            b.push_back(true);
+            for ( size_t k = v_from ; k != v_to ; ) {
+                auto p = parent(k);
+                v.push_back(k);
+                b.push_back(check_if_eqnode(k));
+                k = p;
+            }
+            std::string str; str.reserve(50); //guess
+            size_t start, end;
+            const size_t last = v.size()-1;
+            for ( size_t i = last; i > 0; i-- ) {
+                start   =  get_start_label(v[i]);
+                end     =  get_end_label(v[i]);
+                str.append(data + start, end - start - !b[i-1]);
+            }
+            return str;
+        }
+        
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
+        /*D ( __attribute__((noinline)) )
         std::string build_string(size_t v_from, size_t v_to) const {
             const char * data = (const char *) m_label.data();
             std::string str = "";
@@ -377,7 +398,7 @@ namespace glad {
                 v = p;                                //go up!
             }
             return str;
-        }
+        }*/
         
         D ( __attribute__((noinline)) )
         t_range prefix_range(const int64_t& v) const {
@@ -398,60 +419,29 @@ namespace glad {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
-            //string str (prefix.size(), 0);
             size_t plen  = pref_len-i;
             size_t start = get_start_label(v);
             size_t end   = get_end_label(v);
             size_t llen  = end-start;
-            #pragma ivdep
-            for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
+            std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
             while ( plen >= llen && i != pref_len && v >= 0 ) {
                 i     += llen-1;
                 v     = map_to_edge(v, prefix.at(i), data[end-1]);
-                if ( v < 0 ) return v;  //TODO is it possible to optimize?
+                if ( v < 0 ) return v;                                      //TODO optimize removing the if
                 i     += (prefix.at(i) == data[end-1]);
                 plen  = pref_len-i;
-                start = get_start_label(v); //TODO adjust here without additional if in the code... if takes -1 : bordello
+                start = get_start_label(v);
                 end   = get_end_label(v);
                 llen  = end-start;
-                #pragma ivdep
-                for ( int k = 0; k < llen && k < plen; k++ )
-                    str[i+k] = data[start+k];
+                std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
             }
             /* here I have to match if the string is correct... */
             if ( v > 0 && prefix.compare(str) == 0 ) {
-                /* save the prefix from the root up to the father... */
                 for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) // probably not so much efficient
                     str.pop_back();
-                //std::cout << "saved string: " << str << endl;
                 return v;
             }
             return -1;
-        }
-        
-        /* complete search */
-        D ( __attribute__((noinline)) )
-        int64_t search(const string& prefix) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            size_t plen, start, end, llen;
-            while ( i != pref_len && v >= 0 ) {
-                plen = pref_len-i;
-                start = get_start_label(v);
-                end = get_end_label(v);
-                llen = end-start;
-                if ( plen < llen ) {
-                    return ( !prefix.compare(i, plen, data+start, plen) ? v : -1 );
-                }
-                if ( llen > 1 && prefix.compare(i, llen-1, data+start, llen-1) != 0)
-                    return -1;
-                i += llen-1;
-                v = map_to_edge(v, prefix.at(i), data[end-1]);
-                i += (prefix.at(i) == data[end-1]);
-            }
-            return v;
         }
         
         D ( __attribute__((noinline)) )
