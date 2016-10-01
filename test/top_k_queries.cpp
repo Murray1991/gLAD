@@ -4,16 +4,21 @@
 #include <chrono>
 
 #ifdef TST1
+    std::string type = "tst1.txt";
     #include "tst1.hpp"
 #endif
 
 #ifdef TST2
+    std::string type = "tst2.txt";
     #include "tst2.hpp"
 #endif
 
 #ifdef TST3
+    std::string type = "tst3.txt";
     #include "tst3.hpp"
 #endif
+
+#include "utils.hpp"
 
 using namespace std;
 using namespace glad;
@@ -33,6 +38,7 @@ int main(int argc, char *argv[]) {
     }
     
     int k = atoi(argv[1]);
+    std::string out_file("outfile."+type);
     std::string test_file(argv[2]);
     std::string index_file(argv[3]);
     std::vector<std::string> prefixes;
@@ -46,15 +52,16 @@ int main(int argc, char *argv[]) {
     }
     double total_us = 0;
     size_t found = 0;
-    auto start = chrono::high_resolution_clock::now();
     
+    //glad::trunc_file(out_file);
+    auto start = chrono::high_resolution_clock::now();
     for ( auto& prefix : prefixes ) {
-        
         auto query_start = chrono::high_resolution_clock::now(); 
         auto result_list = index.top_k(prefix, k);
         auto query_time  = chrono::high_resolution_clock::now() - query_start;
         auto query_us    = chrono::duration_cast<chrono::microseconds>(query_time).count();
         total_us        += query_us;
+        //glad::write_in_file(out_file, prefix, result_list);
         found           += result_list.size();
         
     } 
