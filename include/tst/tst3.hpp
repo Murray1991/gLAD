@@ -98,9 +98,10 @@ namespace glad {
             auto v       = blind_search(prefix, new_prefix);
             auto range   = prefix_range(v);
             auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
+            //cout << top_idx << endl;
             tVPSU result_list;
-            for (auto idx : top_idx){
-                std::string s;
+            std::string s;
+            for (auto idx : top_idx) {
                 s.reserve(g*prefix.size());
                 s += new_prefix;
                 s += std::move( build_string(m_bp_sel10(idx+1)-1, parent(v)) );
@@ -125,7 +126,8 @@ namespace glad {
                 size_in_bytes(m_start_sel) +
                 size_in_bytes(m_weight) +
                 size_in_bytes(m_rmq) +
-                size_in_bytes(m_helper0);
+                size_in_bytes(m_helper0) +
+                size_in_bytes(m_helper1);
             return size;
         }
         
@@ -443,6 +445,8 @@ namespace glad {
                 end     =  get_end_label(v[i]);
                 str.append(data + start, end - start - !b[i-1]);
             }
+            if (str.back() == EOS)
+                str.pop_back();
             return str;
         }
         
@@ -512,7 +516,33 @@ namespace glad {
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
+        D ( __attribute__((noinline)) )
+        void label_copy(size_t start, std::string& str, size_t i, size_t len) const {
+            for (size_t k = i, j = 0; j < len; j++, k++)
+                str[k] = m_label[start+j];
+        }
+        
+        D ( __attribute__((noinline)) )
+        int64_t search(const string& prefix, string& str) const {
+            size_t start = 0, end = 0, plen = 0, llen = 0;
+            int64_t v = 0, i = 0;
+            const size_t pref_len = prefix.size();
+            for ( ; plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
+                plen = pref_len - i;
+                start = get_start_label(v);
+                end = get_end_label(v);
+                llen = end-start;
+                label_copy(start, str, i, (llen <= plen)*llen + (plen < llen)*plen);
+                i += llen-1;
+                v = map_to_edge(v, prefix[i], m_label[end-1]);
+                i += (prefix[i] == m_label[end-1]);
+            }
+            if ( v > 0 && prefix.compare(0, i, str, 0, i) == 0) {
+                return v;
+            }
+            return -1;
+        }
+        
         D ( __attribute__((noinline)) )
         int64_t blind_search(const string& prefix, string& str) const {
             int64_t v = 0, i = 0;
@@ -534,7 +564,6 @@ namespace glad {
                 llen  = end-start;
                 std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
             }
-            /* here I have to match if the string is correct... */
             if ( v > 0 && prefix.compare(str) == 0 ) {
                 for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) 
                     str.pop_back();
@@ -542,6 +571,36 @@ namespace glad {
             }
             return -1;
         }
+        
+        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
+        /*D ( __attribute__((noinline)) )
+        int64_t blind_search(const string& prefix, string& str) const {
+            int64_t v = 0, i = 0;
+            const char * data = (const char *) m_label.data();
+            const size_t pref_len = prefix.size();
+            size_t plen  = pref_len-i;
+            size_t start = get_start_label(v);
+            size_t end   = get_end_label(v);
+            size_t llen  = end-start;
+            std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
+            while ( plen >= llen && i != pref_len && v >= 0 ) {
+                i     += llen-1;
+                v     = map_to_edge(v, prefix.at(i), data[end-1]);
+                if ( v < 0 ) return v;  //TODO is it possible to optimize?
+                i     += (prefix.at(i) == data[end-1]);
+                plen  = pref_len-i;
+                start = get_start_label(v);
+                end   = get_end_label(v);
+                llen  = end-start;
+                std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
+            }
+            if ( v > 0 && prefix.compare(str) == 0 ) {
+                for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) 
+                    str.pop_back();
+                return v;
+            }
+            return -1;
+        }*/
         
         D ( __attribute__((noinline)) )
         size_t count_leaves() {
