@@ -17,6 +17,11 @@
     std::string type = "tst3.txt";
     #include "tst3.hpp"
 #endif
+    
+#ifdef TST4
+    std::string type = "tst4.txt";
+    #include "tst4.hpp"
+#endif
 
 #include "utils.hpp"
 
@@ -56,6 +61,7 @@ int main(int argc, char *argv[]) {
     //glad::trunc_file(out_file);
     auto start = chrono::high_resolution_clock::now();
     for ( auto& prefix : prefixes ) {
+        //cout << "search for '" << prefix << "'\n";
         auto query_start = chrono::high_resolution_clock::now(); 
         auto result_list = index.top_k(prefix, k);
         auto query_time  = chrono::high_resolution_clock::now() - query_start;
@@ -63,11 +69,14 @@ int main(int argc, char *argv[]) {
         total_us        += query_us;
         //glad::write_in_file(out_file, prefix, result_list);
         found           += result_list.size();
-        
     } 
     auto end = chrono::high_resolution_clock::now();
     auto average = total_us/prefixes.size();
     
+#ifdef TST4
+    std::cout << "-- A: " << index.countA << endl;
+    std::cout << "-- B: " << index.countB << endl;
+#endif
     std::cout << "-- total time: " << chrono::duration_cast<chrono::milliseconds>(end-start).count() << " ms" <<endl;
     std::cout << "-- average time for " << prefixes.size();
     std::cout << " ( found: " << found << " ) ";

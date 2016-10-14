@@ -13,9 +13,6 @@ Ascoli Piceno	51168
 Asti	76534
 Avellino	56339
 Aversa	51631
-Aversa	51631
-Aversa	51631
-Aversa	51631
 Bagheria	56336
 Bari	315933
 Barletta	94459
