@@ -20,6 +20,12 @@
     #include "tst3.hpp"
     const char * type = "3";
 #endif
+    
+#ifdef TST4
+    #include "tst4.hpp"
+    const char * type = "4";
+#endif
+    
 using namespace std;
 using namespace chrono;
 
