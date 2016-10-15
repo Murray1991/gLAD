@@ -400,6 +400,8 @@ namespace glad {
                 end     =  get_end_label(v[i]);
                 str.append(data + start, end - start - !b[i-1]);
             }
+            if (str.back() == EOS)
+                str.pop_back();
             return str;
         }
         
