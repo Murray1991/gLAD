@@ -116,6 +116,7 @@ namespace glad {
         /* first position of a matching string OR std::string::npos */
         D ( __attribute__((noinline)) )
         size_t position(const size_t v, const std::string& prefix, const size_t pos = 0) const {
+            //cout << "-------------\n";
             const char * data   = (const char *) m_label.data();
             const char * pdata  = prefix.c_str();
             auto start  = get_start_label(v)+pos;
@@ -130,9 +131,13 @@ namespace glad {
             size_t p, k, o;
             for ( p = 0, o = 0, k = 0; p != std::string::npos && len > o && k < 1; o += p) {
                 p = findstr(data + start + o, len - o , pdata, plen);
-                k += ( (p == 0 && pos == 0) || p > 0 && p != std::string::npos && data[start+o+p-1] == EOS);
+                k += ( (p == 0 && pos == 0 && o == 0) || p > 0 && p != std::string::npos && data[start+o+p-1] == EOS);
                 p += ( p != std::string::npos && k < 1);
+                //cout << "p here: " << p << endl;
             }
+            //cout << "o here: " << o << endl;
+            //cout << "k here: " << k << endl;
+            //cout << "-------------\n";
             return (p != std::string::npos && len > o ? pos+o : std::string::npos);
         }
         
@@ -143,6 +148,7 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         void handleA(const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list) {
+            //cout << "A..\n";
             countA++;
             constexpr size_t g = 2;
             const char * data = (const char *) m_label.data();
@@ -158,23 +164,34 @@ namespace glad {
             std::string str0(prefix, 0, i);
             std::string str1(prefix, i);
             std::string s;
+            
+            //std::string lab = get_label(v);
+            //cout << "str0: " << str0 << endl;
+            //cout << "str1: " << str1 << endl;
                         
             size_t p = 0, p0 = 0, p1 = 0, c = 0, index;
             if ( str1.size() > 0 ) {
+               // cout << "str1.size > 0 \n";
                 p = p0 = position(v, str1, 0);
                 for ( ; p0 != std::string::npos; p0 = position(v, str1, p1), c++ ) {
                     p1 = findch(data + start + p0, EOS, len) + p0;
                 }
                 // p is the position in the label!
                 if ( p != std::string::npos ) {
+                    
+                    //cout << "found...\n";
+                    //cout << "p: " << p << endl;
+                    //cout << lab[p] << lab[p-1] << lab[p-2] << endl;
                     auto start = get_start_label(v);
                     index = first + std::count(m_label.begin() + start, m_label.begin() + start + p, EOS);
                 }
             } else {
+               // cout << "str1.size <= 0 \n";
                 index = first;
                 c = last - first + 1;
             }
             if ( p != std::string::npos ) {
+              //  cout << "index: " << index << " ; c: " << c << endl;
                 auto top_idx = heaviest_indexes({{index,index + c - 1}}, k);
                 for (auto idx : top_idx) {
                     t_range r = positions(v, first, idx, 0);
@@ -223,6 +240,7 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         void handleB(const size_t v, const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list)  {
+            //cout << "B...\n";
             countB++;
             constexpr size_t g = 5; // "guess" constant multiplier
             const char * data = (const char *) m_label.data();
@@ -584,7 +602,7 @@ namespace glad {
         D ( __attribute__((noinline)) )
         int64_t search(const string& prefix, string& str) const {
             size_t start = 0, end = 0, plen = 0, llen = 0;
-            int64_t v = 0, i = 0;
+            int64_t v = 0, v0 = 0, i = 0;
             const size_t pref_len = prefix.size();
             for ( ; plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
                 plen = pref_len - i;
@@ -593,14 +611,15 @@ namespace glad {
                 llen = end-start;
                 label_copy(start, str, i, (llen <= plen)*llen + (plen < llen)*plen);
                 i += llen-1;
+                v0 = v;
                 v = map_to_edge(v, prefix[i], m_label[end-1]);
                 i += (prefix[i] == m_label[end-1]);
             }
-            if ( v > 0 && prefix.compare(0, i, str, 0, i) == 0 ) {
-                if ( plen < llen) {
-                    v = parent(v);
+            if ( prefix.compare(0, i, str, 0, i) == 0 ) {
+                if (plen < llen) {
                     for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) 
                         str.pop_back();
+                    return v0;
                 }
                 return v;
             }
