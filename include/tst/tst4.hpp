@@ -194,7 +194,6 @@ namespace glad {
             auto i = low - m_first.begin();
             auto f0 = m_first[i-(i>0)];
             auto f1 = m_first[i];
-            assert( f0 <= idx && idx < f1 );
             return ( i - (i>0) );
         }
         
