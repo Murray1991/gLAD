@@ -1,52 +1,50 @@
 #!/bin/bash
 
-#perf stuff
-PERF_OPTS="-g --call-graph dwarf -F 90 -e cycles,instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses -o"
-PERF_REC="perf record"
-PERF="$PERF_REC $PERF_OPTS"
+[ ! $# -gt 0 ] && echo "Usage: ./tests.sh k [record|stat]" && exit 1
 
-#perf's files for report
+#perf directory
 DIR="./perf"
-FILE_TST1="$DIR/perf.record.tst1.data"
-FILE_TST2="$DIR/perf.record.tst2.data"
-FILE_TST3="$DIR/perf.record.tst3.data"
-FILE_TST4="$DIR/perf.record.tst4.data"
 
-#perf1 & perf2
-PERF1="$PERF $FILE_TST1"
-PERF2="$PERF $FILE_TST2"
-PERF3="$PERF $FILE_TST3"
-PERF4="$PERF $FILE_TST4"
-
-#test's executables and parameters
-BIN1="./build/top_k_queries.tst1.bin 5"
-BIN2="./build/top_k_queries.tst2.bin 5"
-BIN3="./build/top_k_queries.tst3.bin 5"
-BIN4="./build/top_k_queries.tst4.bin 5"
-QUER2="./test/test_cases/very_little_queries.txt"
-QUER="./test/test_cases/medium_queries.txt"
-FILE="./data/enwiki-20160601-all-titles"
-SUF1="1.sdsl"
-SUF2="2.sdsl"
-SUF3="3.sdsl"
-SUF4="4.sdsl"
-
-arg=$1
-[ -n "$arg" ] && PERF1="" && PERF2="" && PERF3="" && PERF4="" && PERF_STAT="" && PERF_OPTS_STAT=""
-
-#profile the tests...
-EXE1="$PERF1 $BIN1 $QUER $FILE.$SUF1"
-echo "$EXE1 ..."; $EXE1
-EXE2="$PERF2 $BIN2 $QUER $FILE.$SUF2"
-echo "$EXE2 ..."; $EXE2
-EXE3="$PERF3 $BIN3 $QUER $FILE.$SUF3"
-echo "$EXE3 ..."; $EXE3
-EXE4="$PERF4 $BIN4 $QUER $FILE.$SUF4"
-echo "$EXE4 ..."; $EXE4
+#perf record
+PERF_REC="perf record"
+PERF_OPTS="-g --call-graph dwarf -F 90 -e cycles,instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses -o"
+PERF="$PERF_REC $PERF_OPTS"
+PERF1="$PERF $DIR/perf.record.tst1.data"
+PERF2="$PERF $DIR/perf.record.tst2.data"
+PERF3="$PERF $DIR/perf.record.tst3.data"
+PERF4="$PERF $DIR/perf.record.tst4.data"
 
 #perf stat
-PERF_OPTS_STAT="-e instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses "
 PERF_STAT="perf stat"
-STAT_EXE1="$PERF_STAT $PERF_OPTS_STAT $BIN1 $QUER $FILE.$SUF1"
-STAT_EXE2="$PERF_STAT $PERF_OPTS_STAT $BIN2 $QUER $FILE.$SUF2"
-STAT_EXE3="$PERF_STAT $PERF_OPTS_STAT $BIN3 $QUER $FILE.$SUF3"
+PERF_OPTS_STAT="-e instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses "
+
+#executables and parameters
+FILE="./data/enwiki-20160601-all-titles"
+QUER="./test/test_cases/medium_queries.txt"
+
+K=$1
+EXE1="./build/top_k_queries.tst1.bin $K $QUER $FILE.1.sdsl"
+EXE2="./build/top_k_queries.tst2.bin $K $QUER $FILE.2.sdsl"
+EXE3="./build/top_k_queries.tst3.bin $K $QUER $FILE.3.sdsl"
+EXE4="./build/top_k_queries.tst4.bin $K $QUER $FILE.4.sdsl"
+
+ARG=$2
+if [ "$ARG" == 'record' ]
+then
+    EXE1="$PERF1 $EXE1"
+    EXE2="$PERF2 $EXE2"
+    EXE3="$PERF3 $EXE3"
+    EXE4="$PERF4 $EXE4"
+elif [ "$ARG" == 'stat' ]
+then
+    EXE1="$PERF_STAT $PERF_OPTS_STAT $EXE1"
+    EXE2="$PERF_STAT $PERF_OPTS_STAT $EXE2"
+    EXE3="$PERF_STAT $PERF_OPTS_STAT $EXE3"
+    EXE4="$PERF_STAT $PERF_OPTS_STAT $EXE4"
+fi
+
+#tests...
+echo "$EXE1 ..."; $EXE1
+echo "$EXE2 ..."; $EXE2
+echo "$EXE3 ..."; $EXE3
+echo "$EXE4 ..."; $EXE4
