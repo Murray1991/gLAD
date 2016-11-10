@@ -135,6 +135,20 @@ namespace glad {
             return (p != std::string::npos && len > o ? pos+o : std::string::npos);
         }
         
+        void print_bv(sdsl::bit_vector bv) {
+            if (bv.size() < 50) {
+            for ( auto it = bv.begin() ; it != bv.end(); it++ )
+                std::cout << *it << " ";
+            std::cout << std::endl;
+            }
+        }
+        
+        void print() {
+            cout << "BP: "; print_bv(m_bp);
+            cout << "H0: "; print_bv(m_helper0);
+            cout << "H1: "; print_bv(m_helper1);
+        }
+        
     public: 
         
         int countA = 0;
@@ -622,12 +636,14 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         size_t get_start_label(size_t v) const {
-            return m_start_sel(node_id(v)) + 1 - node_id(v);
+            auto id = node_id(v);
+            return m_start_sel(id) + 1 - id;
         }
         
         D ( __attribute__((noinline)) )
-        size_t get_end_label(const size_t v) const {
-            return m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
+        size_t get_end_label(size_t v) const {
+            auto id = node_id(v);
+            return m_start_sel(id+1) + 1 - (id+1);
         }
         
         D ( __attribute__((noinline)) )

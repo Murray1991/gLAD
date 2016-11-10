@@ -84,7 +84,9 @@ namespace glad {
             build_tst_bp(strings, strings.size(), n, max_weight);
             DEBUG_STDOUT("-- end build_tst_bp\n");
             
-            m_rmq = t_rmq(&m_weight);
+            m_rmq = t_rmq(&m_weight);            
+            cout << count_leaves() << endl;
+            cout << strings.size() << endl;
             assert(count_leaves() == strings.size());
         }
         
@@ -129,6 +131,20 @@ namespace glad {
                 size_in_bytes(m_helper0) +
                 size_in_bytes(m_helper1);
             return size;
+        }
+        
+        void print_bv(sdsl::bit_vector bv) {
+            if (bv.size() < 50) {
+            for ( auto it = bv.begin() ; it != bv.end(); it++ )
+                std::cout << *it << " ";
+            std::cout << std::endl;
+            }
+        }
+        
+        void print() {
+            cout << "BP: "; print_bv(m_bp);
+            cout << "H0: "; print_bv(m_helper0);
+            cout << "H1: "; print_bv(m_helper1);
         }
         
     private:
@@ -177,7 +193,7 @@ namespace glad {
         tnode *build_tst (tVS& strings) 
         {
             typedef std::tuple<int_t, int_t, int_t, int_t, bool, tnode *, bool> call_t;
-            constexpr int_t target_level = 5; // >= 1 , with an higher number should be more efficient in memory consumption?
+            constexpr int_t target_level = 1; // >= 1 , with an higher number should be more efficient in memory consumption?
             
             std::stack<call_t> stk;
             int_t sx, dx; char ch;
@@ -623,12 +639,14 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         size_t get_start_label(size_t v) const {
-            return m_start_sel(node_id(v)) + 1 - node_id(v);
+            auto id = node_id(v);
+            return m_start_sel(id) + 1 - id;
         }
         
         D ( __attribute__((noinline)) )
-        size_t get_end_label(const size_t v) const {
-            return m_start_sel(node_id(v)+1) + 1 - (node_id(v)+1);
+        size_t get_end_label(size_t v) const {
+            auto id = node_id(v);
+            return m_start_sel(id+1) + 1 - (id+1);
         }
         
         D ( __attribute__((noinline)) )
