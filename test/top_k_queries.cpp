@@ -73,6 +73,11 @@ int main(int argc, char *argv[]) {
     auto end = chrono::high_resolution_clock::now();
     auto average = total_us/prefixes.size();
     
+    //TODO build the file and compute his hash
+    //Output:
+    //K     average (us)      found       hash_of_the_file       
+    std::cout << k << "\t" << average << "\t" << endl;
+    /*
 #ifdef TST4
     std::cout << "-- A: " << index.countA << endl;
     std::cout << "-- B: " << index.countB << endl;
@@ -81,5 +86,5 @@ int main(int argc, char *argv[]) {
     std::cout << "-- average time for " << prefixes.size();
     std::cout << " ( found: " << found << " ) ";
     std::cout << " top-" << k << " queries: " << std::setprecision(3) << (average / 1000.0);
-    std::cout << " ms" << endl;
+    std::cout << " ms" << endl;*/
 }
