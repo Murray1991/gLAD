@@ -317,11 +317,11 @@ namespace glad {
             helper1_it                = helper1.begin();
             *(start_it++) = 1;
             
+            std::cout << "-- build tst...\n";
             tnode * root  = build_tst(strings);
             delete root;
             
-            DEBUG_STDOUT("-- resizing...\n");
-            cout<<"--resizing\n";
+            std::cout << "-- resizing bit vectors...\n"
             m_bp.resize(bp_it-m_bp.begin()); 
             labels.resize(label_it-labels.begin());
             first.resize(first_it-first.begin());
@@ -329,9 +329,7 @@ namespace glad {
             helper1.resize(helper1_it-helper1.begin());
             start_bv.resize(start_it-start_bv.begin());
             
-            DEBUG_STDOUT("-- building data structures...\n");
-            
-            cout<<"--building\n";
+            std::cout << "-- building data structures...\n");
             m_start_bv   = t_bv(start_bv);
             m_helper0    = t_bv(helper0);
             m_helper1    = t_bv(helper1);
@@ -344,6 +342,48 @@ namespace glad {
             util::init_support(m_bp_sel10, &m_bp);
         }
         
+        tnode * build_tst (tVS& strings) {
+            int_t sx, dx; uint8_t ch;
+            auto h0_it = helper0_it++;
+            auto h1_it = helper1_it++;
+            
+            std::tie(sx, dx, ch) = partitionate(strings, 0, strings.size()-1, 0);
+            tnode * root = new tnode(ch);
+            
+            start_it++;
+            *(start_it++) = 1;
+            *(bp_it++)    = 1;
+            *(label_it++) = ch;
+            
+            node->lonode = rec_build_tst3 (strings, 0, sx-1, 0);
+            compress(node->lonode); 
+            mark(node->lonode, 0);
+            bool lo = node->lonode != 0; 
+            delete node->lonode; 
+            node->lonode = nullptr;
+            
+            node->eqnode = rec_build_tst3 (strings, sx, dx, 1);
+            compress(node->eqnode); 
+            mark(node->eqnode, 0);
+            bool eq = node->eqnode != 0;
+            delete node->eqnode; 
+            node->eqnode = nullptr;
+            
+            node->hinode = rec_build_tst3 (strings, dx+1, strings.size()-1, 0);
+            compress(node->hinode);
+            mark(node->hinode, 0);
+            bool hi = node->hinode != 0;
+            delete node->hinode; 
+            node->hinode = nullptr;
+            
+            *h0_it = eq && ( lo != hi );
+            *h1_it = *h0_it ? (lo != 0) : (lo && eq && hi);
+            bp_it++;
+            
+            return root;
+        }
+        
+        /*
         tnode *build_tst (tVS& strings) {
             tnode * root = rec_build_tst2 (strings, 0, strings.size()-1, 0);
             return root;
@@ -376,7 +416,7 @@ namespace glad {
             *h1_it = *h0_it ? (lo != 0) : (lo && eq && hi);
             bp_it++;
             return node;
-        }
+        }*/
         
         tnode * rec_build_tst3 (tVS& strings, int_t first, int_t last, int_t index) {
             
