@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     //TODO build the file and compute his hash
     //Output:
     //K     average (us)      found       hash_of_the_file       
-    std::cout << k << "\t" << average << "\t" << endl;
+    std::cout << k << "\t" << average << "\t" << found << endl;
     /*
 #ifdef TST4
     std::cout << "-- A: " << index.countA << endl;
