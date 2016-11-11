@@ -155,6 +155,7 @@ namespace glad {
         sdsl::bit_vector::iterator helper1_it;
         sdsl::int_vector<8>::iterator label_it;
         
+        /* --------- old
         void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
             t_bv_uc                   start_bv(2*N+n+2, 0);
             t_bv_uc                   helper0(n+N,0);
@@ -188,8 +189,103 @@ namespace glad {
             m_bp_support = t_bp_support(&m_bp);
             util::init_support(m_bp_rnk10, &m_bp);
             util::init_support(m_bp_sel10, &m_bp);
+        } */
+        
+        void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
+            t_bv_uc                   start_bv(2*N+n+2, 0);
+            t_bv_uc                   helper0(n+N,0);
+            t_bv_uc                   helper1(n+N,0);
+            int_vector<8> labels      = int_vector<8>(n);
+            int_vector<> first(N, 0, bits::hi(N)+1 );
+            m_bp                      = t_bv_uc(2*2*N, 0);
+            
+            bp_it                     = m_bp.begin();
+            start_it                  = start_bv.begin();
+            label_it                  = labels.begin();
+            helper0_it                = helper0.begin();
+            helper1_it                = helper1.begin();
+            *(start_it++) = 1;
+            
+            std::cout << "-- build tst...\n";
+            tnode * root  = build_tst(strings);
+            delete root;
+            
+            std::cout << "-- resizing bit vectors...\n";
+            m_bp.resize(bp_it-m_bp.begin()); 
+            labels.resize(label_it-labels.begin());
+            helper0.resize(helper0_it-helper0.begin());
+            helper1.resize(helper1_it-helper1.begin());
+            start_bv.resize(start_it-start_bv.begin());
+            
+            std::cout << "-- building data structures...\n";
+            m_start_bv   = t_bv(start_bv);
+            m_helper0    = t_bv(helper0);
+            m_helper1    = t_bv(helper1);
+            m_label      = t_label(labels);
+            m_start_sel  = t_sel(&m_start_bv);
+            m_bp_support = t_bp_support(&m_bp);
+            util::init_support(m_bp_rnk10, &m_bp);
+            util::init_support(m_bp_sel10, &m_bp);
         }
         
+        tnode * build_tst (tVS& strings) {
+            int_t sx, dx; uint8_t ch;
+            auto h0_it = helper0_it++;
+            auto h1_it = helper1_it++;
+            
+            std::tie(sx, dx, ch) = partitionate(strings, 0, strings.size()-1, 0);
+            tnode * root = new tnode(ch);
+            
+            start_it++;
+            *(start_it++) = 1;
+            *(bp_it++)    = 1;
+            *(label_it++) = ch;
+            
+            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index) {
+                node = rec_build_tst (strings, start, end, index);
+                compress(node);
+                mark(node, 0);
+                b = node != 0;
+                delete node;
+                node = nullptr;
+            };
+            
+            bool lo, eq, hi;
+            fun(root->lonode, lo, 0, sx-1, 0);
+            fun(root->eqnode, eq, sx, dx, 1);
+            fun(root->hinode, hi, dx+1, strings.size()-1, 0);
+
+            *h0_it = eq && ( lo != hi );
+            *h1_it = *h0_it ? (lo != 0) : (lo && eq && hi);
+            bp_it++;
+            
+            return root;
+        }
+        
+        int myint = 0;
+        
+        tnode * rec_build_tst (tVS& strings, int_t first, int_t last, int_t index) {
+            if ( last < first ) {
+                return nullptr;
+            }
+            
+            uint8_t ch;
+            int_t sx, dx;
+            std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
+            tnode *node = new tnode(ch);
+            node->lonode = rec_build_tst (strings, first, sx-1, index);
+            if ( sx < dx || (sx == dx && ch != EOS)) {
+                node->eqnode = rec_build_tst (strings, sx, dx, index+1);
+            }
+            if ( sx == dx && ch == EOS ) {
+                strings[sx].clear();
+            }
+            node->hinode = rec_build_tst(strings, dx+1, last, index);
+
+            return node;
+        }
+        
+        /* -------- old
         tnode *build_tst (tVS& strings) 
         {
             typedef std::tuple<int_t, int_t, int_t, int_t, bool, tnode *, bool> call_t;
@@ -251,7 +347,7 @@ namespace glad {
                             }
                             stk.pop();
                         }
-                        /* clear string added */
+                        // clear string added
                         strings[sx].clear();
                     }
                 }
@@ -272,7 +368,7 @@ namespace glad {
                 }
             }
             return root;
-        }
+        } */
         
         void mark(tnode * node, bool help) {
             if ( node == nullptr )
