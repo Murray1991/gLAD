@@ -183,18 +183,19 @@ namespace glad {
             helper_it                 = helper.begin();
             *(start_it++) = 1;
             
+            std::cout << "-- build tst...\n";
             tnode * root  = build_tst(strings);
             delete root;
             
-            DEBUG_STDOUT("-- resizing...\n");
+            std::cout << "-- resizing bit vectors...\n";
             m_bp.resize(bp_it-m_bp.begin()); 
-            labels.resize(label_it-labels.begin()); 
+            labels.resize(label_it-labels.begin());
             helper.resize(helper_it-helper.begin());
             start_bv.resize(start_it-start_bv.begin());
             
-            DEBUG_STDOUT("-- building data structures...\n");
+            std::cout << "-- building data structures...\n";
             m_start_bv   = t_bv(start_bv);
-            m_helper     = t_bv(helper);
+            m_helper    = t_bv(helper);
             m_label      = t_label(labels);
             m_start_sel  = t_sel(&m_start_bv);
             m_bp_support = t_bp_support(&m_bp);
@@ -202,80 +203,57 @@ namespace glad {
             util::init_support(m_bp_sel10, &m_bp);
         }
         
-        tnode *build_tst (tVS& strings) 
-        {
-            typedef std::tuple<int_t, int_t, int_t, int_t, bool, tnode *, bool> call_t;
-            constexpr int_t target_level = 1; // >= 1 , with an higher number should be more efficient in memory consumption?
+        tnode * build_tst (tVS& strings) {
+            int_t sx, dx; uint8_t ch;
+            *(helper_it++) = 1;
             
-            std::stack<call_t> stk;
-            int_t sx, dx; char ch;
-            tnode * root = new tnode(), * node;
-            int_t first, last, index, level; bool help, marked;
+            std::tie(sx, dx, ch) = partitionate(strings, 0, strings.size()-1, 0);
+            tnode * root = new tnode(ch);
             
-            stk.emplace(0, strings.size()-1, 0, 0, 1, root, 0 <= target_level);
-            while ( ! stk.empty() ) 
-            {
-                std::tie(first, last, index, level, help, node, marked) = stk.top();
-                
-                if ( !marked ) {
-                    stk.pop();
-                }
-                if ( marked && !node->is_leaf() ) {
-                    stk.pop();
-                    if ( level < target_level )
-                        bp_it++;
-                    if ( level == target_level ) {
-                        compress(node);
-                        mark(node, help);
-                        delete node->hinode;
-                        delete node->eqnode;
-                        delete node->lonode;
-                        node->hinode = node->eqnode = node->lonode = nullptr;
-                    }
-                    continue;
-                }
+            start_it++;
+            *(start_it++) = 1;
+            *(bp_it++)    = 1;
+            *(label_it++) = ch;
             
-                std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
-                node->label = ch;
-                // put this if at the end, should be safe...
-                if ( level < target_level ) {
-                    start_it++;
-                    *(bp_it++)      = 1;
-                    *(start_it++)   = 1;
-                    *(label_it++)   = ch; 
-                    *(helper_it++)  = help;
-                }
+            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index, bool markval) {
+                node = rec_build_tst (strings, start, end, index);
+                compress(node);
+                mark(node, markval);
+                b = node != 0;
+                delete node;
+                node = nullptr;
+            };
+            
+            bool lo, eq, hi;
+            fun(root->lonode, lo, 0, sx-1, 0, false);
+            fun(root->eqnode, eq, sx, dx, 1, true);
+            fun(root->hinode, hi, dx+1, strings.size()-1, 0, false);
 
-                if ( dx < last && !node->hinode ) {
-                    node->hinode = new tnode();
-                    stk.emplace(dx+1, last, index, level+1, 0, node->hinode, level+1 <= target_level);     //hinode
-                }
-                if ( sx <= dx && !node->eqnode ) {
-                    if ( sx < dx || (sx == dx && ch != EOS)) {
-                        node->eqnode = new tnode();
-                        stk.emplace(sx, dx, index+1, level+1, 1, node->eqnode, level+1 <= target_level);       //eqnode
-                    }
-                    if (sx == dx && ch == EOS) {
-                        if ( marked ) {
-                            if ( level < target_level )
-                                bp_it++;
-                            else {
-                                mark(node,help);
-                            }
-                            stk.pop();
-                        }
-                        /* clear string added */
-                        strings[sx].clear();
-                    }
-                }
-                if ( first < sx && !node->lonode ) {
-                    node->lonode = new tnode();
-                    stk.emplace(first, sx-1, index, level+1, 0, node->lonode, level+1 <= target_level);    //lonode
-                }
-
-            }
+            bp_it++;
+            
             return root;
         }
+        
+        tnode * rec_build_tst (tVS& strings, int_t first, int_t last, int_t index) {
+            if ( last < first ) {
+                return nullptr;
+            }
+            
+            uint8_t ch;
+            int_t sx, dx;
+            std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
+            tnode *node = new tnode(ch);
+            node->lonode = rec_build_tst (strings, first, sx-1, index);
+            if ( sx < dx || (sx == dx && ch != EOS)) {
+                node->eqnode = rec_build_tst (strings, sx, dx, index+1);
+            }
+            if ( sx == dx && ch == EOS ) {
+                strings[sx].clear();
+            }
+            node->hinode = rec_build_tst(strings, dx+1, last, index);
+
+            return node;
+        } 
         
         void mark(tnode * node, bool help) {
             if ( node == nullptr )
