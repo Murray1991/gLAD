@@ -155,48 +155,11 @@ namespace glad {
         sdsl::bit_vector::iterator helper1_it;
         sdsl::int_vector<8>::iterator label_it;
         
-        /* --------- old
         void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
             t_bv_uc                   start_bv(2*N+n+2, 0);
             t_bv_uc                   helper0(n+N,0);
             t_bv_uc                   helper1(n+N,0);
             int_vector<8> labels      = int_vector<8>(n);
-            m_bp                      = t_bv_uc(2*2*N, 0);
-            
-            bp_it                     = m_bp.begin();
-            start_it                  = start_bv.begin();
-            label_it                  = labels.begin();
-            helper0_it                = helper0.begin();
-            helper1_it                = helper1.begin();
-            *(start_it++) = 1;
-            
-            tnode * root  = build_tst(strings);
-            delete root;
-            
-            DEBUG_STDOUT("-- resizing...\n");
-            m_bp.resize(bp_it-m_bp.begin()); 
-            labels.resize(label_it-labels.begin()); 
-            helper0.resize(helper0_it-helper0.begin());
-            helper1.resize(helper1_it-helper1.begin());
-            start_bv.resize(start_it-start_bv.begin());
-            
-            DEBUG_STDOUT("-- building data structures...\n");
-            m_start_bv   = t_bv(start_bv);
-            m_helper0    = t_bv(helper0);
-            m_helper1    = t_bv(helper1);
-            m_label      = t_label(labels);
-            m_start_sel  = t_sel(&m_start_bv);
-            m_bp_support = t_bp_support(&m_bp);
-            util::init_support(m_bp_rnk10, &m_bp);
-            util::init_support(m_bp_sel10, &m_bp);
-        } */
-        
-        void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
-            t_bv_uc                   start_bv(2*N+n+2, 0);
-            t_bv_uc                   helper0(n+N,0);
-            t_bv_uc                   helper1(n+N,0);
-            int_vector<8> labels      = int_vector<8>(n);
-            int_vector<> first(N, 0, bits::hi(N)+1 );
             m_bp                      = t_bv_uc(2*2*N, 0);
             
             bp_it                     = m_bp.begin();
@@ -262,8 +225,6 @@ namespace glad {
             return root;
         }
         
-        int myint = 0;
-        
         tnode * rec_build_tst (tVS& strings, int_t first, int_t last, int_t index) {
             if ( last < first ) {
                 return nullptr;
@@ -285,103 +246,16 @@ namespace glad {
             return node;
         }
         
-        /* -------- old
-        tnode *build_tst (tVS& strings) 
-        {
-            typedef std::tuple<int_t, int_t, int_t, int_t, bool, tnode *, bool> call_t;
-            constexpr int_t target_level = 1; // >= 1 , with an higher number should be more efficient in memory consumption?
-            
-            std::stack<call_t> stk;
-            int_t sx, dx; char ch;
-            tnode * root = new tnode(), * node;
-            int_t first, last, index, level; bool help, marked;
-            
-            stk.emplace(0, strings.size()-1, 0, 0, 1, root, 0 <= target_level);
-            while ( ! stk.empty() ) 
-            {
-                std::tie(first, last, index, level, help, node, marked) = stk.top();
-                
-                if ( !marked ) {
-                    stk.pop();
-                }
-                if ( marked && !node->is_leaf() ) {
-                    stk.pop();
-                    if ( level < target_level )
-                        bp_it++;
-                    if ( level == target_level ) {
-                        compress(node);
-                        mark(node, help);
-                        delete node->hinode;
-                        delete node->eqnode;
-                        delete node->lonode;
-                        node->hinode = node->eqnode = node->lonode = nullptr;
-                    }
-                    continue;
-                }
-            
-                std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
-                node->label = ch;
-                // put this if at the end, should be safe...
-                if ( level < target_level ) {
-                    start_it++;
-                    *(bp_it++)      = 1;
-                    *(start_it++)   = 1;
-                    *(label_it++)   = ch; 
-                }
-
-                if ( dx < last && !node->hinode ) {
-                    node->hinode = new tnode();
-                    stk.emplace(dx+1, last, index, level+1, 0, node->hinode, level+1 <= target_level);     //hinode
-                }
-                if ( sx <= dx && !node->eqnode ) {
-                    if ( sx < dx || (sx == dx && ch != EOS)) {
-                        node->eqnode = new tnode();
-                        stk.emplace(sx, dx, index+1, level+1, 1, node->eqnode, level+1 <= target_level);       //eqnode
-                    }
-                    if (sx == dx && ch == EOS) {
-                        if ( marked ) {
-                            if ( level < target_level )
-                                bp_it++;
-                            else {
-                                mark(node,help);
-                            }
-                            stk.pop();
-                        }
-                        // clear string added
-                        strings[sx].clear();
-                    }
-                }
-                if ( first < sx && !node->lonode ) {
-                    node->lonode = new tnode();
-                    stk.emplace(first, sx-1, index, level+1, 0, node->lonode, level+1 <= target_level);    //lonode
-                }
-                // put this if at the end, should be safe...
-                if ( level < target_level ) {
-
-                    //TODO check!
-                    if ( ! node->is_leaf() ) {
-                        *helper0_it = node->eqnode && ( (node->lonode != 0) != (node->hinode != 0 ) );
-                        *helper1_it = *helper0_it ? (node->lonode != 0) : (node->lonode && node->eqnode && node->hinode);
-                        helper0_it++; helper1_it++;
-                    }
-
-                }
-            }
-            return root;
-        } */
-        
         void mark(tnode * node, bool help) {
             if ( node == nullptr )
                 return;
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
-
             //TODO check!
             if ( ! node->is_leaf() ) {
                 *helper0_it = node->eqnode && ( (node->lonode != 0) != (node->hinode != 0 ) );
                 *helper1_it = *helper0_it ? (node->lonode != 0) : (node->lonode && node->eqnode && node->hinode);
                 helper0_it++; helper1_it++;
             }
-
             *(start_it++)   = 1;
             *(bp_it++)      = 1;
             mark(node->lonode, 0);
@@ -453,7 +327,7 @@ namespace glad {
             auto l23 = l3 || l2a || l2b;
             auto len = ( l3 && ch1 == ch2 ) + ( l3 && ch1>ch2 )*2 + \
                        ( l2a && ch1 == ch2 ) + \
-                       ( l2b && ch1 > ch2 );                                //redundant, just for "clarity"
+                       ( l2b && ch1 > ch2 );                              //redundant, just for "clarity"
                        
             retval += (!l23 && !l0 && !l1)*(-1);                            //case no mapping
             retval += (l23 || l1)*cv;                                       //cv for (1) (2) (3) (4)
@@ -463,32 +337,6 @@ namespace glad {
             for ( int i = 0; i < len; i++ )
                 retval = m_bp_support.find_close(retval)+1;
             return retval;
-        }
-        
-        D ( __attribute__((noinline)) )
-        int64_t map_to_edge2(const size_t v, const uint8_t ch1, const uint8_t ch2) const {
-            const size_t idx = node_id(v)-m_bp_rnk10(v+1)-1;
-            const size_t h0 = m_helper0[idx];
-            const size_t h1 = m_helper1[idx];
-            size_t cv = v+1;
-            size_t n = m_bp[v+1];       // check if leaf...          
-            if ( !h0 && h1 && n ) {          //case of 3 children
-                for ( int i=0; i < (ch1==ch2)+(ch1>ch2)*2; i++ )
-                    cv = m_bp_support.find_close(cv)+1;
-                return cv;
-            } else if ( h0 && h1 && n && ch1 <= ch2) {    //case of 2 children with lonode
-                for ( int i=0; i < (ch1==ch2); i++ )
-                    cv = m_bp_support.find_close(cv)+1;
-                return cv;
-            } else if ( h0 && !h1 && n && ch1 >= ch2 ) {   //case of 2 children with hinode
-                for ( int i=0; i < (ch1>ch2); i++ )
-                    cv = m_bp_support.find_close(cv)+1;
-                return cv;
-            } else if ( !h0 && !h1 && n && ch1 == ch2 ) {    //case of 1 child
-                return cv;
-            } else if ( !h0 && !h1 && !n && ch1 == ch2 )    //case is a leaf
-                return v;
-            return -1;
         }
 
         D ( __attribute__((noinline)) )
@@ -683,36 +531,6 @@ namespace glad {
             }
             return -1;
         }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
-        /*D ( __attribute__((noinline)) )
-        int64_t blind_search(const string& prefix, string& str) const {
-            int64_t v = 0, i = 0;
-            const char * data = (const char *) m_label.data();
-            const size_t pref_len = prefix.size();
-            size_t plen  = pref_len-i;
-            size_t start = get_start_label(v);
-            size_t end   = get_end_label(v);
-            size_t llen  = end-start;
-            std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
-            while ( plen >= llen && i != pref_len && v >= 0 ) {
-                i     += llen-1;
-                v     = map_to_edge(v, prefix.at(i), data[end-1]);
-                if ( v < 0 ) return v;  //TODO is it possible to optimize?
-                i     += (prefix.at(i) == data[end-1]);
-                plen  = pref_len-i;
-                start = get_start_label(v);
-                end   = get_end_label(v);
-                llen  = end-start;
-                std::strncpy(&str[i], data+start, (llen <= plen )*llen + ( plen < llen )*plen);
-            }
-            if ( v > 0 && prefix.compare(str) == 0 ) {
-                for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) 
-                    str.pop_back();
-                return v;
-            }
-            return -1;
-        }*/
         
         D ( __attribute__((noinline)) )
         size_t count_leaves() {
