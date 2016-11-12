@@ -67,24 +67,21 @@ int main(int argc, char *argv[]) {
         auto query_time  = chrono::high_resolution_clock::now() - query_start;
         auto query_us    = chrono::duration_cast<chrono::microseconds>(query_time).count();
         total_us        += query_us;
-        //glad::write_in_file(out_file, prefix, result_list);
+        
+        glad::write_in_file(out_file, prefix, result_list);
         found           += result_list.size();
     } 
     auto end = chrono::high_resolution_clock::now();
     auto average = total_us/prefixes.size();
     
-    //TODO build the file and compute his hash
-    //Output:
-    //K     average (us)      found       hash_of_the_file       
-    std::cout << k << "\t" << average << "\t" << found << endl;
-    /*
-#ifdef TST4
-    std::cout << "-- A: " << index.countA << endl;
-    std::cout << "-- B: " << index.countB << endl;
-#endif
-    std::cout << "-- total time: " << chrono::duration_cast<chrono::milliseconds>(end-start).count() << " ms" <<endl;
-    std::cout << "-- average time for " << prefixes.size();
-    std::cout << " ( found: " << found << " ) ";
-    std::cout << " top-" << k << " queries: " << std::setprecision(3) << (average / 1000.0);
-    std::cout << " ms" << endl;*/
+    std::ifstream t(out_file);
+    std::stringstream buffer;
+    buffer << t.rdbuf();
+    std::remove(out_file.c_str());
+     
+    std::hash<std::string> hash_fn;
+    size_t buffer_hash = hash_fn(buffer.str());
+    std::cout << k << "\t" << average << "\t" << found << "\t" << prefixes.size() << "\t" << buffer_hash << endl;
+
+    return 0;
 }
