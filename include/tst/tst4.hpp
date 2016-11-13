@@ -32,6 +32,7 @@ namespace glad {
     class tst {
         
         static constexpr int thresh = 32;
+        static constexpr int L1_line = 128;  // guess
         typedef sdsl::bit_vector        t_bv_uc;
         typedef sdsl::int_vector<8>     t_label;
         typedef sdsl::int_vector<>      t_first;
@@ -376,16 +377,24 @@ namespace glad {
             return root;
         }
         
+        int_t count_chars (tVS& strings, int_t first, int_t last, int_t index) const {
+            int_t count = 0;
+            for ( size_t i = first; i <= last; i++ ) {
+                count += (strings[i].size() - index);
+            }
+            return count;
+        }
+        
         tnode * rec_build_tst (tVS& strings, int_t first, int_t last, int_t index) {
             tnode * node;
             if ( last - first < 0 ) {
                 return nullptr;
             }
             int_t sx, dx; uint8_t ch;
-            if ( last - first < thresh ) {
+            if ( last - first < thresh && count_chars(strings, first, last, index) <= L1_line) {
                 *(first_it++) = first;
                 node = new tnode("");
-                node->label.reserve( 64 );
+                node->label.reserve( L1_line );
                 for ( size_t i = first; i <= last; i++ ) {
                     node->label.append(strings[i], index, strings[i].size()-index);
                 }
