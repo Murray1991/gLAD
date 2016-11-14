@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     double total_us = 0;
     size_t found = 0;
     
-    //glad::trunc_file(out_file);
+    glad::trunc_file(out_file);
     auto start = chrono::high_resolution_clock::now();
     for ( auto& prefix : prefixes ) {
         //cout << "search for '" << prefix << "'\n";
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
     std::ifstream t(out_file);
     std::stringstream buffer;
     buffer << t.rdbuf();
-    std::remove(out_file.c_str());
+    //std::remove(out_file.c_str());
      
     std::hash<std::string> hash_fn;
     size_t buffer_hash = hash_fn(buffer.str());
