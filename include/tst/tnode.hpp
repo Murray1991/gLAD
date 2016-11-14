@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "utils.hpp"
 
 using namespace std;
 
@@ -19,7 +20,7 @@ namespace glad {
         }
         
         bool is_end() {
-            return label.at(label.size()-1) == 3;
+            return label.at(label.size()-1) == EOS;
         }
         
         bool is_leaf() { 
