@@ -160,12 +160,12 @@ namespace glad {
             countA++;
             constexpr size_t g = 2;
             const char * data = (const char *) m_label.data();
-            size_t v = m_bp_sel10(range[0]+1)-1;
+            size_t l = m_bp_sel10(range[0]+1)-1;
             size_t first = m_first[range[0]];
             size_t last  = range[1] < m_first.size()-1 ? m_first[range[1]+1]-1 : m_weight.size()-1;
             
-            auto start  = get_start_label(v);
-            auto end    = get_end_label(v);
+            auto start  = get_start_label(l);
+            auto end    = get_end_label(l);
             auto len    = end - start;
             
             size_t i = mismatch_index(prefix, new_prefix);
@@ -175,13 +175,13 @@ namespace glad {
 
             size_t p = 0, p0 = 0, p1 = 0, c = 0, index;
             if ( str1.size() > 0 ) {
-                p = p0 = position(v, str1, 0);
-                for ( ; p0 != std::string::npos; p0 = position(v, str1, p1), c++ ) {
+                p = p0 = position(l, str1, 0);
+                for ( ; p0 != std::string::npos; p0 = position(l, str1, p1), c++ ) {
                     p1 = findch(data + start + p0, EOS, len) + p0;
                 }
                 // p is the position in the label!
                 if ( p != std::string::npos ) {                    
-                    auto start = get_start_label(v);
+                    auto start = get_start_label(l);
                     index = first + std::count(m_label.begin() + start, m_label.begin() + start + p, EOS);
                 }
             } else {
@@ -191,7 +191,7 @@ namespace glad {
             if ( p != std::string::npos ) {
                 auto top_idx = heaviest_indexes({{index,index + c - 1}}, k);
                 for (auto idx : top_idx) {
-                    t_range r = positions(v, first, idx, 0);
+                    t_range r = positions(l, first, idx, 0);
                     std::string apnd(data + r[0], r[1] - r[0]);
                     s.reserve(g * prefix.size()); //magic
                     s += str0;
@@ -262,11 +262,9 @@ namespace glad {
             int64_t v = search(prefix, new_prefix);
             auto range   = prefix_range(v);
             tVPSU result_list;
-            // two cases:   A) range[0] == range[1] => leaf
-            //              B) range[0] <  range[1] => non-leaf
-            if ( range[0] == range[1] ) {
-                handleA(range, prefix, new_prefix, k, result_list);
-            } else if ( range[0] < range[1] ) {
+            if (is_leaf(v)) {
+		handleA(range, prefix, new_prefix, k, result_list);
+            } else if ( range[0] <= range[1] ) {
                 handleB(v, range, prefix, new_prefix, k, result_list);
             }
             return result_list;
@@ -357,7 +355,7 @@ namespace glad {
             *(label_it++) = ch;
             
             auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index) {
-                node = rec_build_tst (strings, start, end, index);
+	        node = rec_build_tst (strings, start, end, index);
                 compress(node);
                 mark(node, 0);
                 b = node != 0;
@@ -378,7 +376,8 @@ namespace glad {
         }
         
         int_t count_chars (tVS& strings, int_t first, int_t last, int_t index) const {
-            int_t count = 0;
+	  assert ( last - first < thresh );
+	  int_t count = 0;
             for ( size_t i = first; i <= last; i++ ) {
                 count += (strings[i].size() - index);
             }
@@ -391,18 +390,18 @@ namespace glad {
                 return nullptr;
             }
             int_t sx, dx; uint8_t ch;
-            if ( last - first < thresh && count_chars(strings, first, last, index) <= L1_line) {
+            if ( last - first < thresh && ( count_chars(strings, first, last, index) <= L1_line || first == last ) ) {
                 *(first_it++) = first;
                 node = new tnode("");
                 node->label.reserve( L1_line );
-                for ( size_t i = first; i <= last; i++ ) {
+		for ( size_t i = first; i <= last; i++ ) {
                     node->label.append(strings[i], index, strings[i].size()-index);
                 }
             } else {
                 std::tie(sx, dx, ch) = partitionate(strings, first, last, index);
                 node = new tnode(ch);
                 node->lonode = rec_build_tst (strings, first, sx-1, index);
-                node->eqnode = rec_build_tst (strings, sx, dx, index+1);
+		node->eqnode = rec_build_tst (strings, sx, dx, index+1);
                 node->hinode = rec_build_tst (strings, dx+1, last, index);
             }
             return node;
@@ -433,7 +432,7 @@ namespace glad {
         void compress (tnode * node) {
             if ( node == nullptr )
                 return;
-            while ( !node->lonode && node->eqnode && !node->hinode ) {
+            while ( !node->lonode && node->eqnode && !node->eqnode->is_leaf() && !node->hinode ) {
                 tnode * next = node->eqnode;
                 node->label += next->label;
                 node->lonode = next->lonode;
@@ -542,6 +541,7 @@ namespace glad {
                 b.push_back(check_if_eqnode(k, p));
                 k = p;
             }
+	    
             std::string str; 
             str.reserve(100); //guess
             size_t start, end;
@@ -598,8 +598,8 @@ namespace glad {
             size_t start = 0, end = 0, plen = 0, llen = 0;
             int64_t v = 0, v0 = 0, i = 0;
             const size_t pref_len = prefix.size();
-            for ( ; plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
-                plen = pref_len - i;
+	    for ( ; plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
+	      	plen = pref_len - i;
                 start = get_start_label(v);
                 end = get_end_label(v);
                 llen = end-start;
