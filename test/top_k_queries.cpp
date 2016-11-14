@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
         auto query_us    = chrono::duration_cast<chrono::microseconds>(query_time).count();
         total_us        += query_us;
         
-        glad::write_in_file(out_file, prefix, result_list);
+        write_in_file(out_file, prefix, result_list);
         found           += result_list.size();
     } 
     auto end = chrono::high_resolution_clock::now();
