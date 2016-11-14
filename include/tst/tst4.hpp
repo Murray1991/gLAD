@@ -196,6 +196,7 @@ namespace glad {
                     s.reserve(g * prefix.size()); //magic
                     s += str0;
                     s += std::move(apnd);
+                    if (s.back() == EOS) s.pop_back();
                     result_list.push_back(tPSU(std::move(s), m_weight[idx]));                
                 }
             }
@@ -251,6 +252,7 @@ namespace glad {
                 s += new_prefix;
                 s += std::move( build_string(l, parent(v)) );
                 s.append(data + r[0], r[1] - r[0]);
+                if (s.back() == EOS) s.pop_back();
                 result_list.push_back(tPSU(std::move(s), m_weight[idx]));                
             }
         }
