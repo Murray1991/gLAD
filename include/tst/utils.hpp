@@ -19,7 +19,7 @@ namespace glad {
     #define DEBUG_STDOUT(x)
 #endif
     
-    #define EOS ((char) 1)
+    #define EOS ((char) 3)
     
     typedef uint32_t                                    uint_t;
     typedef int                                         int_t;
