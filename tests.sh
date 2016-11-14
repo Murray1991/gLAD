@@ -51,6 +51,6 @@ function execute {
     echo "$EXE4 ..."; $EXE4
 }
 
-#execute "./test/test_cases/big_range_queries1.txt"
-#execute "./test/test_cases/big_range_queries2.txt"
+execute "./test/test_cases/big_range_queries1.txt"
+execute "./test/test_cases/big_range_queries2.txt"
 execute "./test/test_cases/range_queries.txt"
