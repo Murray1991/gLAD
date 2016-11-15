@@ -203,7 +203,66 @@ namespace glad {
             util::init_support(m_bp_sel10, &m_bp);
         }
         
+        struct frame {
+            frame (tnode *& node, int_t sx, int_t dx, int_t index, bool called, bool markval) : node(node), sx(sx), dx(dx), index(index), called(called), markval(markval) {};
+            tnode *&node;
+            int_t sx;
+            int_t dx;
+            int_t index;
+            bool called;
+            bool markval;
+        };
+        
         tnode * build_tst (tVS& strings) {
+            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index, bool markval) {
+                node = rec_build_tst (strings, start, end, index);
+                compress(node);
+                mark(node, markval);
+                b = node != 0;
+                delete node;
+                node = nullptr;
+            };
+            
+            int_t sx, dx; uint8_t ch;
+            std::stack<frame> stk;
+            tnode *root = nullptr;
+            stk.emplace(root, 0, strings.size()-1, 0, false, true);
+
+            while ( !stk.empty() ) {
+                frame& f = stk.top();
+                if (!f.called) {
+                    std::tie(sx, dx, ch) = partitionate(strings, f.sx, f.dx, f.index);
+                    f.node = new tnode(ch);
+                    start_it++;
+                    *(start_it++) = 1;
+                    *(bp_it++)    = 1;
+                    *(label_it++) = ch;
+                    *(helper_it++) = f.markval;
+                    if ( f.index == 1 ) {
+                        bool lo, eq, hi;
+                        fun(f.node->lonode, lo, f.sx, sx-1, f.index, false);
+                        fun(f.node->eqnode, eq, sx, dx, f.index+1, true);
+                        fun(f.node->hinode, hi, dx+1, f.dx, f.index, false);
+                    } else if ( f.index < 1 ) {
+                        if ( dx < f.dx )
+                            stk.emplace(f.node->hinode, dx+1, f.dx, f.index, false, false);
+                        stk.emplace(f.node->eqnode, sx, dx, f.index+1, false, true);
+                        if  ( f.sx < sx )
+                            stk.emplace(f.node->lonode, f.sx, sx-1, f.index, false, false);
+                    } else{
+                        std::cout << "ERROR\n";
+                    }
+                } else {
+                    stk.pop();
+                    bp_it++;
+                }
+                f.called = true;
+            }
+            return root;
+        }
+        
+        
+        tnode * build_tst2 (tVS& strings) {
             int_t sx, dx; uint8_t ch;
             *(helper_it++) = 1;
             
@@ -226,8 +285,11 @@ namespace glad {
             
             bool lo, eq, hi;
             fun(root->lonode, lo, 0, sx-1, 0, false);
+            std::cout << "-- lower subtree... done" << std::endl;
             fun(root->eqnode, eq, sx, dx, 1, true);
+            std::cout << "-- equal subtree... done" << std::endl;
             fun(root->hinode, hi, dx+1, strings.size()-1, 0, false);
+            std::cout << "-- higher subtree... done" << std::endl;
 
             bp_it++;
             
