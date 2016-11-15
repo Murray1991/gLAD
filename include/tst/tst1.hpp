@@ -261,41 +261,6 @@ namespace glad {
             return root;
         }
         
-        
-        tnode * build_tst2 (tVS& strings) {
-            int_t sx, dx; uint8_t ch;
-            *(helper_it++) = 1;
-            
-            std::tie(sx, dx, ch) = partitionate(strings, 0, strings.size()-1, 0);
-            tnode * root = new tnode(ch);
-            
-            start_it++;
-            *(start_it++) = 1;
-            *(bp_it++)    = 1;
-            *(label_it++) = ch;
-            
-            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index, bool markval) {
-                node = rec_build_tst (strings, start, end, index);
-                compress(node);
-                mark(node, markval);
-                b = node != 0;
-                delete node;
-                node = nullptr;
-            };
-            
-            bool lo, eq, hi;
-            fun(root->lonode, lo, 0, sx-1, 0, false);
-            std::cout << "-- lower subtree... done" << std::endl;
-            fun(root->eqnode, eq, sx, dx, 1, true);
-            std::cout << "-- equal subtree... done" << std::endl;
-            fun(root->hinode, hi, dx+1, strings.size()-1, 0, false);
-            std::cout << "-- higher subtree... done" << std::endl;
-
-            bp_it++;
-            
-            return root;
-        }
-        
         tnode * rec_build_tst (tVS& strings, int_t first, int_t last, int_t index) {
             if ( last < first ) {
                 return nullptr;
