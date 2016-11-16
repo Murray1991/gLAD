@@ -1,13 +1,14 @@
 #!/bin/bash
 
-[ ! $# -gt 0 ] && echo "Usage: ./tests.sh K TestCase [record|stat]" && exit 1
+[ ! $# -ge 3 ] && echo "Usage: ./tests.sh K TestCase File [record|stat]" && exit 1
 
 #perf directory
 DIR="./perf"
 
 #perf record
 PERF_REC="perf record"
-PERF_OPTS="-g --call-graph dwarf -F 90 -e cycles,instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses -o"
+FREQ="-F 97"
+PERF_OPTS="-g --call-graph dwarf $FREQ -e cycles,instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses -o"
 PERF="$PERF_REC $PERF_OPTS"
 PERF1="$PERF $DIR/perf.record.tst1.data"
 PERF2="$PERF $DIR/perf.record.tst2.data"
@@ -18,11 +19,11 @@ PERF4="$PERF $DIR/perf.record.tst4.data"
 PERF_STAT="perf stat"
 PERF_OPTS_STAT="-e instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-references,cache-misses "
 
-#executables and parameters
-FILE="./data/enwiki-20160601-all-titles"
+#parameters
 K=$1
-FILE=$2
-ARG=$3
+QUER=$2
+FILE=$3
+ARG=$4
 
 function execute {
     QUER=$1
@@ -52,4 +53,4 @@ function execute {
     echo "$EXE4 ..."; $EXE4
 }
 
-execute $FILE
+execute $QUER
