@@ -70,14 +70,13 @@ int main(int argc, char *argv[]) {
     cout << "--------------------\n";
             
     auto t1 = std::chrono::high_resolution_clock::now();
-    //glad::tst<> t(file);
     glad::tst<> t;
     if ( ! load_from_file (t, index_file ) ) {
         cout << "building tst index for '" << file << "'..." << endl;
         glad::tst<> t1(file);
         cout << "store tst index in '" << index_file << "'..." << endl;
         store_to_file(t1, index_file);
-        load_from_file (t, index_file ); //it's horrible.
+        load_from_file (t, index_file );
     }
     
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -87,6 +86,5 @@ int main(int argc, char *argv[]) {
             "space (MB): " << t.get_size()/1000000 << endl;
     
     query_from_input(t, k);
-    //queries_at_random(t,file);
     return 0;
 }
