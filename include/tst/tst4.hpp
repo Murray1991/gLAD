@@ -87,9 +87,9 @@ namespace glad {
             int64_t v = search(prefix, new_prefix);
             auto range   = prefix_range(v);
             tVPSU result_list;
-            if (is_leaf(v)) {
+            if (v >= 0 && is_leaf(v)) {
 		handleA(range, prefix, new_prefix, k, result_list);
-            } else if ( range[0] <= range[1] ) {
+            } else if ( v >= 0 && range[0] <= range[1] ) {
                 handleB(v, range, prefix, new_prefix, k, result_list);
             }
             return result_list;
@@ -538,7 +538,7 @@ namespace glad {
             size_t start = 0, end = 0, plen = 0, llen = 0;
             int64_t v = 0, v0 = 0, i = 0;
             const size_t pref_len = prefix.size();
-	    for ( ; plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
+	    for ( ; pref_len > 0 && plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
 	      	plen = pref_len - i;
                 start = get_start_label(v);
                 end = get_end_label(v);
@@ -549,7 +549,7 @@ namespace glad {
                 v = map_to_edge(v, prefix[i], m_label[end-1]);
                 i += (prefix[i] == m_label[end-1]);
             }
-            if ( prefix.compare(0, i, str, 0, i) == 0 ) {
+            if ( pref_len > 0 && prefix.compare(0, i, str, 0, i) == 0 ) {
                 if (plen < llen) {
                     for ( ; plen != 0 && llen != 0 ; plen--, llen-- ) 
                         str.pop_back();
