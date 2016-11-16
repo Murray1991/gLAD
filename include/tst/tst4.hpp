@@ -59,19 +59,12 @@ namespace glad {
         tst(const std::string& filename) {
             uint_t n = 0, N = 0, max_weight = 0;
             tVPSU string_weight;
-            DEBUG_STDOUT("-- start getting input\n");
             process_input(filename, string_weight);
-            DEBUG_STDOUT("-- end getting input\n");
-            DEBUG_STDOUT("-- start processing input (sort + unique)\n");
             sort_unique(string_weight);
-            DEBUG_STDOUT("-- end processing input\n");
             std::for_each( string_weight.begin() , string_weight.end(), [&n,&max_weight](const tPSU& a) {
                 n+= a.first.size();
                 if ( a.second > max_weight ) max_weight = a.second; 
             });
-            
-            DEBUG_STDOUT("-- building strings & weights\n");
-            DEBUG_STDOUT(sizeof(tPSU) << " " << sizeof(string) << " " << sizeof(string*) << endl); 
             sdsl::int_vector<> weights ( string_weight.size(), 0, bits::hi(max_weight)+1 );
             tVS strings;
             strings.reserve( string_weight.size() );
@@ -81,180 +74,10 @@ namespace glad {
                   strings.push_back(std::move(a.first));
                   i++;
             });
-            DEBUG_STDOUT("-- erasing string_weight\n");
             decltype(string_weight){}.swap(string_weight);
             m_weight = t_weight( std::move(weights) );
-            DEBUG_STDOUT("-- end building strings & weights\n");
-            DEBUG_STDOUT("-- N: " << strings.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
-            DEBUG_STDOUT("-- start build_tst_bp\n");
             build_tst_bp(strings, strings.size(), n, max_weight);
-            DEBUG_STDOUT("-- end build_tst_bp\n");
-            
             m_rmq = t_rmq(&m_weight);
-        }
-        
-        /*return position of char relative to the string*/
-        D ( __attribute__((noinline)) )
-        size_t findch (const char * str, char ch, size_t n) const  {
-            size_t i;
-            for (i = 0; str[i] != ch && i < n; i++);
-            return (i < n)*i + (i==n)*std::string::npos;
-        }
-        
-        /* return position relative to the string */
-        D ( __attribute__((noinline)) )
-        size_t findstr (const char * str0, size_t n0, const char * str1, size_t n1) const {
-            for ( size_t i = 0, j = 0, k = 0; j < n0 && i < n0; i += j + k) {
-                j = findch(str0 + i, str1[0], n0 - i);                                          //j position of first char
-                for ( k = 1 ; k < n1 && i + j + k < n0 && str0[i+j+k] == str1[k] ; k++ );       //increment k
-                if ( k == n1 )
-                    return i+j;
-            }
-            return std::string::npos;
-        }
-        
-        /* first position of a matching string OR std::string::npos */
-        D ( __attribute__((noinline)) )
-        size_t position(const size_t v, const std::string& prefix, const size_t pos = 0) const {
-            const char * data   = (const char *) m_label.data();
-            const char * pdata  = prefix.c_str();
-            auto start  = get_start_label(v)+pos;
-            auto end    = get_end_label(v);
-            auto len    = end - start;
-            auto plen   = prefix.size();
-            
-            size_t pos2 = 0;
-            if ( start == end - 1 )                                      //TODO ???
-                return std::string::npos;
-            
-            size_t p, k, o;
-            for ( p = 0, o = 0, k = 0; p != std::string::npos && len > o && k < 1; o += p) {
-                p = findstr(data + start + o, len - o , pdata, plen);
-                k += ( (p == 0 && pos == 0 && o == 0) || p > 0 && p != std::string::npos && data[start+o+p-1] == EOS);
-                p += ( p != std::string::npos && k < 1);
-            }
-            return (p != std::string::npos && len > o ? pos+o : std::string::npos);
-        }
-        
-        void print_bv(sdsl::bit_vector bv) {
-            if (bv.size() < 50) {
-            for ( auto it = bv.begin() ; it != bv.end(); it++ )
-                std::cout << *it << " ";
-            std::cout << std::endl;
-            }
-        }
-        
-        void print() {
-            cout << "BP: "; print_bv(m_bp);
-            cout << "H0: "; print_bv(m_helper0);
-            cout << "H1: "; print_bv(m_helper1);
-        }
-        
-    public: 
-        
-        int countA = 0;
-        int countB = 0;
-        
-        D ( __attribute__((noinline)) )
-        void handleA(const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list) {
-            countA++;
-            constexpr size_t g = 2;
-            const char * data = (const char *) m_label.data();
-            size_t l = m_bp_sel10(range[0]+1)-1;
-            size_t first = m_first[range[0]];
-            size_t last  = range[1] < m_first.size()-1 ? m_first[range[1]+1]-1 : m_weight.size()-1;
-            
-            auto start  = get_start_label(l);
-            auto end    = get_end_label(l);
-            auto len    = end - start;
-            
-            size_t i = mismatch_index(prefix, new_prefix);
-            std::string str0(prefix, 0, i);
-            std::string str1(prefix, i);
-            std::string s;
-
-            size_t p = 0, p0 = 0, p1 = 0, c = 0, index;
-            if ( str1.size() > 0 ) {
-                p = p0 = position(l, str1, 0);
-                for ( ; p0 != std::string::npos; p0 = position(l, str1, p1), c++ ) {
-                    p1 = findch(data + start + p0, EOS, len) + p0;
-                }
-                // p is the position in the label!
-                if ( p != std::string::npos ) {                    
-                    auto start = get_start_label(l);
-                    index = first + std::count(m_label.begin() + start, m_label.begin() + start + p, EOS);
-                }
-            } else {
-                index = first;
-                c = last - first + 1;
-            }
-            if ( p != std::string::npos ) {
-                auto top_idx = heaviest_indexes({{index,index + c - 1}}, k);
-                for (auto idx : top_idx) {
-                    t_range r = positions(l, first, idx, 0);
-                    std::string apnd(data + r[0], r[1] - r[0]);
-                    s.reserve(g * prefix.size()); //magic
-                    s += str0;
-                    s += std::move(apnd);
-                    if (s.back() == EOS) s.pop_back();
-                    result_list.push_back(tPSU(std::move(s), m_weight[idx]));                
-                }
-            }
-            if (result_list.size() > k) {
-                result_list.resize(k);
-            }
-        }
-        
-        size_t find_bucket_range(size_t idx, const t_range& range) const {
-            auto low = std::upper_bound (m_first.begin() + range[0], m_first.begin() + range[1] + 1, idx);
-            auto i = low - m_first.begin();
-            auto f0 = m_first[i-(i>0)];
-            auto f1 = m_first[i];
-            return ( i - (i>0) );
-        }
-        
-        D ( __attribute__((noinline)) )
-        t_range positions(const size_t v, const size_t start_id, const size_t end_id, const size_t pos) const {
-            size_t start = get_start_label(v) + pos;
-            size_t end = get_end_label(v);
-            size_t i, j, id = start_id, idx = end_id;
-            if ( id == idx ) {
-                for ( i = j = start; j < end && m_label[j] != EOS; j++ );
-            } else {
-                if ( m_label[start] == EOS ) {
-                    id++;
-                    start++;
-                }
-                for ( i = j = start ; id <= idx ; id++ ) {
-                    j += m_label[j] == EOS;
-                    for ( i = j; j < end && m_label[j] != EOS; j++ );
-                }
-            }
-            return {{i,j}};
-        }
-        
-        D ( __attribute__((noinline)) )
-        void handleB(const size_t v, const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list)  {
-            countB++;
-            constexpr size_t g = 5; // "guess" constant multiplier
-            const char * data = (const char *) m_label.data();
-            size_t first = m_first[range[0]];
-            size_t last  = range[1] < m_first.size()-1 ? m_first[range[1]+1]-1 : m_weight.size()-1;
-            auto top_idx = heaviest_indexes({{first,last}}, k);
-            size_t i = mismatch_index(prefix, new_prefix);
-            
-            std::string s;            
-            for (auto idx : top_idx) {
-                size_t b = find_bucket_range(idx, range);
-                size_t l = m_bp_sel10(b+1)-1;
-                auto r = positions(l, m_first[b], idx, 0);
-                s.reserve(g * prefix.size());
-                s += new_prefix;
-                s += std::move( build_string(l, parent(v)) );
-                s.append(data + r[0], r[1] - r[0]);
-                if (s.back() == EOS) s.pop_back();
-                result_list.push_back(tPSU(std::move(s), m_weight[idx]));                
-            }
         }
         
         D ( __attribute__((noinline)) )
@@ -289,7 +112,8 @@ namespace glad {
                 size_in_bytes(m_start_sel) +
                 size_in_bytes(m_weight) +
                 size_in_bytes(m_rmq) +
-                size_in_bytes(m_helper0);
+                size_in_bytes(m_helper0)+
+                size_in_bytes(m_helper1);
             return size;
         }
         
@@ -458,6 +282,129 @@ namespace glad {
             return make_tuple(sx,dx,ch);
         }
         
+        /* first position of a matching string OR std::string::npos */
+        D ( __attribute__((noinline)) )
+        size_t position(const size_t v, const std::string& prefix, const size_t pos = 0) const {
+            const char * data   = (const char *) m_label.data();
+            const char * pdata  = prefix.c_str();
+            auto start  = get_start_label(v)+pos;
+            auto end    = get_end_label(v);
+            auto len    = end - start;
+            auto plen   = prefix.size();
+            
+            size_t pos2 = 0;
+            if ( start == end - 1 )                                      //TODO ???
+                return std::string::npos;
+            
+            size_t p, k, o;
+            for ( p = 0, o = 0, k = 0; p != std::string::npos && len > o && k < 1; o += p) {
+                p = findstr(data + start + o, len - o , pdata, plen);
+                k += ( (p == 0 && pos == 0 && o == 0) || p > 0 && p != std::string::npos && data[start+o+p-1] == EOS);
+                p += ( p != std::string::npos && k < 1);
+            }
+            return (p != std::string::npos && len > o ? pos+o : std::string::npos);
+        }
+        
+        D ( __attribute__((noinline)) )
+        void handleA(const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list) {
+            constexpr size_t g = 2;
+            const char * data = (const char *) m_label.data();
+            size_t l = m_bp_sel10(range[0]+1)-1;
+            size_t first = m_first[range[0]];
+            size_t last  = range[1] < m_first.size()-1 ? m_first[range[1]+1]-1 : m_weight.size()-1;
+            
+            auto start  = get_start_label(l);
+            auto end    = get_end_label(l);
+            auto len    = end - start;
+            
+            size_t i = mismatch_index(prefix, new_prefix);
+            std::string str0(prefix, 0, i);
+            std::string str1(prefix, i);
+            std::string s;
+
+            size_t p = 0, p0 = 0, p1 = 0, c = 0, index;
+            if ( str1.size() > 0 ) {
+                p = p0 = position(l, str1, 0);
+                for ( ; p0 != std::string::npos; p0 = position(l, str1, p1), c++ ) {
+                    p1 = findch(data + start + p0, EOS, len) + p0;
+                }
+                // p is the position in the label!
+                if ( p != std::string::npos ) {                    
+                    auto start = get_start_label(l);
+                    index = first + std::count(m_label.begin() + start, m_label.begin() + start + p, EOS);
+                }
+            } else {
+                index = first;
+                c = last - first + 1;
+            }
+            if ( p != std::string::npos ) {
+                auto top_idx = heaviest_indexes({{index,index + c - 1}}, k);
+                for (auto idx : top_idx) {
+                    t_range r = positions(l, first, idx, 0);
+                    std::string apnd(data + r[0], r[1] - r[0]);
+                    s.reserve(g * prefix.size()); //magic
+                    s += str0;
+                    s += std::move(apnd);
+                    if (s.back() == EOS) s.pop_back();
+                    result_list.push_back(tPSU(std::move(s), m_weight[idx]));                
+                }
+            }
+            if (result_list.size() > k) {
+                result_list.resize(k);
+            }
+        }
+        
+        size_t find_bucket_range(size_t idx, const t_range& range) const {
+            auto low = std::upper_bound (m_first.begin() + range[0], m_first.begin() + range[1] + 1, idx);
+            auto i = low - m_first.begin();
+            auto f0 = m_first[i-(i>0)];
+            auto f1 = m_first[i];
+            return ( i - (i>0) );
+        }
+        
+        D ( __attribute__((noinline)) )
+        t_range positions(const size_t v, const size_t start_id, const size_t end_id, const size_t pos) const {
+            size_t start = get_start_label(v) + pos;
+            size_t end = get_end_label(v);
+            size_t i, j, id = start_id, idx = end_id;
+            if ( id == idx ) {
+                for ( i = j = start; j < end && m_label[j] != EOS; j++ );
+            } else {
+                if ( m_label[start] == EOS ) {
+                    id++;
+                    start++;
+                }
+                for ( i = j = start ; id <= idx ; id++ ) {
+                    j += m_label[j] == EOS;
+                    for ( i = j; j < end && m_label[j] != EOS; j++ );
+                }
+            }
+            return {{i,j}};
+        }
+        
+        D ( __attribute__((noinline)) )
+        void handleB(const size_t v, const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list)  {
+            constexpr size_t g = 5; // "guess" constant multiplier
+            const char * data = (const char *) m_label.data();
+            size_t first = m_first[range[0]];
+            size_t last  = range[1] < m_first.size()-1 ? m_first[range[1]+1]-1 : m_weight.size()-1;
+            auto top_idx = heaviest_indexes({{first,last}}, k);
+            size_t i = mismatch_index(prefix, new_prefix);
+            
+            std::string s;            
+            for (auto idx : top_idx) {
+                size_t b = find_bucket_range(idx, range);
+                size_t l = m_bp_sel10(b+1)-1;
+                auto r = positions(l, m_first[b], idx, 0);
+                s.reserve(g * prefix.size());
+                s += new_prefix;
+                s += std::move( build_string(l, parent(v)) );
+                s.append(data + r[0], r[1] - r[0]);
+                if (s.back() == EOS) s.pop_back();
+                result_list.push_back(tPSU(std::move(s), m_weight[idx]));                
+            }
+        }        
+        
         D ( __attribute__((noinline)) )
         int64_t map_to_edge(const size_t v, const uint8_t ch1, const uint8_t ch2) const {
             const size_t idx = node_id(v)-m_bp_rnk10(v+1)-1;
@@ -557,20 +504,11 @@ namespace glad {
             return str;
         }
         
-        // str1.size() > str2.size()
         D ( __attribute__((noinline)) )
         size_t mismatch_index(const std::string& str1, const std::string& str2) const {
             size_t i;
             for ( i = 0; i < str2.size() && str1.at(i) == str2.at(i); i++ );
             return i;
-        }
-        
-        D ( __attribute__((noinline)) )
-        t_range prefix_range(const std::string& prefix, string& str) const {
-            int64_t v = search(prefix, str);
-            if ( v < 0 ) return {{1,0}};
-            t_range range = {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
-            return range;
         }
         
         D ( __attribute__((noinline)) )

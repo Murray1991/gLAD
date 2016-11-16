@@ -53,19 +53,12 @@ namespace glad {
         tst(const std::string& filename) {
             uint_t n = 0, N = 0, max_weight = 0;
             tVPSU string_weight;
-            DEBUG_STDOUT("-- start getting input\n");
             process_input(filename, string_weight);
-            DEBUG_STDOUT("-- end getting input\n");
-            DEBUG_STDOUT("-- start processing input (sort + unique)\n");
             sort_unique(string_weight);
-            DEBUG_STDOUT("-- end processing input\n");
             std::for_each( string_weight.begin() , string_weight.end(), [&n,&max_weight](const tPSU& a) {
                 n+= a.first.size();
                 if ( a.second > max_weight ) max_weight = a.second; 
             });
-            
-            DEBUG_STDOUT("-- building strings & weights\n");
-            DEBUG_STDOUT(sizeof(tPSU) << " " << sizeof(string) << " " << sizeof(string*) << endl); 
             sdsl::int_vector<> weights ( string_weight.size(), 0, bits::hi(max_weight)+1 );
             tVS strings;
             strings.reserve( string_weight.size() );
@@ -75,32 +68,22 @@ namespace glad {
                   strings.push_back(std::move(a.first));
                   i++;
             });
-            DEBUG_STDOUT("-- erasing string_weight\n");
             decltype(string_weight){}.swap(string_weight);
             m_weight = t_weight( std::move(weights) );
-            DEBUG_STDOUT("-- end building strings & weights\n");
-            DEBUG_STDOUT("-- N: " << strings.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
-            DEBUG_STDOUT("-- start build_tst_bp\n");
             build_tst_bp(strings, strings.size(), n, max_weight);
-            DEBUG_STDOUT("-- end build_tst_bp\n");
             
             m_rmq = t_rmq(&m_weight);            
-            cout << count_leaves() << endl;
-            cout << strings.size() << endl;
             assert(count_leaves() == strings.size());
         }
-        
-    public:    
         
         D ( __attribute__((noinline)) )
         tVPSU top_k (std::string prefix, size_t k) const {
             constexpr size_t g = 5; // "guess" constant multiplier
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             std::string new_prefix(prefix.size(), 0);
-            auto v       = blind_search(prefix, new_prefix);
+            auto v       = search(prefix, new_prefix);
             auto range   = prefix_range(v);
-            auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
-            //cout << top_idx << endl;
+            auto top_idx = heaviest_indexes(range, k);
             tVPSU result_list;
             std::string s;
             for (auto idx : top_idx) {
@@ -131,20 +114,6 @@ namespace glad {
                 size_in_bytes(m_helper0) +
                 size_in_bytes(m_helper1);
             return size;
-        }
-        
-        void print_bv(sdsl::bit_vector bv) {
-            if (bv.size() < 50) {
-            for ( auto it = bv.begin() ; it != bv.end(); it++ )
-                std::cout << *it << " ";
-            std::cout << std::endl;
-            }
-        }
-        
-        void print() {
-            cout << "BP: "; print_bv(m_bp);
-            cout << "H0: "; print_bv(m_helper0);
-            cout << "H1: "; print_bv(m_helper1);
         }
         
     private:
@@ -235,11 +204,8 @@ namespace glad {
                     if ( f.index == 1 ) {
                         bool a, b, c;
                         fun(f.node->lonode, a, f.sx, sx-1, f.index, false);
-                        assert(a == lo);
                         fun(f.node->eqnode, b, sx, dx, f.index+1, true);
-                        assert(b == eq);
                         fun(f.node->hinode, c, dx+1, f.dx, f.index, false);
-                        assert(c == hi);
                     } else if ( f.index < 1 ) {
                         if ( dx < f.dx )
                             stk.emplace(f.node->hinode, dx+1, f.dx, f.index, false, false);
@@ -283,7 +249,6 @@ namespace glad {
             if ( node == nullptr )
                 return;
             for(auto it = node->label.begin(); it != node->label.end(); (*(label_it++) = *(it++)), start_it++);
-            //TODO check!
             if ( ! node->is_leaf() ) {
                 *helper0_it = node->eqnode && ( (node->lonode != 0) != (node->hinode != 0 ) );
                 *helper1_it = *helper0_it ? (node->lonode != 0) : (node->lonode && node->eqnode && node->hinode);
@@ -333,7 +298,6 @@ namespace glad {
             compress(node->hinode);
         }
         
-        // TODO more "elegant" way? maybe using stl
         inline tTUUC partitionate(const tVS& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
@@ -414,8 +378,7 @@ namespace glad {
                      ( h1 && m_bp_support.find_close(cv)+1 == v ));
         }
         
-        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
-        /* attempt to optimization... should be better than previous solution... */
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via search or 0)*/
         D ( __attribute__((noinline)) )
         std::string build_string(const size_t v_from, const size_t v_to) const {
             const char * data = (const char *) m_label.data();
@@ -443,59 +406,6 @@ namespace glad {
             return str;
         }
         
-        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
-        /* attempt to optimization... should be better than previous solution... */
-        D ( __attribute__((noinline)) )
-        std::string build_string3(const size_t v_from, const size_t v_to) const {
-            const char * data = (const char *) m_label.data();
-            std::vector<bool> b; b.reserve(50);    // "guess size"
-            std::vector<size_t> v; v.reserve(50);    //"guess size"
-            v.push_back(0);
-            b.push_back(true);
-            
-            for ( size_t k = v_from; k != v_to; ) {
-                auto p = parent(k);
-                v.push_back(k);
-            }
-            for ( size_t k = v_from ; k != v_to ; ) {
-                auto p = parent(k);
-                v.push_back(k);
-                b.push_back(check_if_eqnode(k, p));
-                k = p;
-            }
-            std::string str; 
-            str.reserve(100); //guess
-            size_t start, end;
-            const size_t last = v.size()-1;
-            for ( size_t i = last; i > 0; i-- ) {
-                start   =  get_start_label(v[i]);
-                end     =  get_end_label(v[i]);
-                str.append(data + start, end - start - !b[i-1]);
-            }
-            return str;
-        }
-        
-        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
-        D ( __attribute__((noinline)) )
-        std::string build_string2(size_t v_from, size_t v_to) const {
-            const char * data = (const char *) m_label.data();
-            std::string str = "";
-            size_t v = v_from;
-            size_t i, o, p;
-            bool b = true;
-            //here we have loop-carried dependencies, because of b => TODO optimize!
-            for ( b = true; v != v_to ; ) {
-                i = get_start_label(v);
-                o = get_end_label(v);
-                std::string lab(data+i, o - i - !b);    //at the beginning is true => start from a leaf!
-                str = std::move(lab) + str;
-                p = parent(v);
-                b = check_if_eqnode(v,p);               //check if this node for the parent is the eqnode
-                v = p;                                  //go up!
-            }
-            return str;
-        }
-        
         D ( __attribute__((noinline)) )
         t_range prefix_range(const int64_t& v) const {
             if ( v < 0 ) return {{1,0}};
@@ -504,7 +414,7 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         t_range prefix_range(const std::string& prefix) const {
-            int64_t v = blind_search(prefix);
+            int64_t v = search(prefix);
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
@@ -517,27 +427,6 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         int64_t search(const string& prefix, string& str) const {
-            size_t start = 0, end = 0, plen = 0, llen = 0;
-            int64_t v = 0, i = 0;
-            const size_t pref_len = prefix.size();
-            for ( ; plen >= llen && i != pref_len && v >= 0  && !is_leaf(v); ) {
-                plen = pref_len - i;
-                start = get_start_label(v);
-                end = get_end_label(v);
-                llen = end-start;
-                label_copy(start, str, i, (llen <= plen)*llen + (plen < llen)*plen);
-                i += llen-1;
-                v = map_to_edge(v, prefix[i], m_label[end-1]);
-                i += (prefix[i] == m_label[end-1]);
-            }
-            if ( v > 0 && prefix.compare(0, i, str, 0, i) == 0) {
-                return v;
-            }
-            return -1;
-        }
-        
-        D ( __attribute__((noinline)) )
-        int64_t blind_search(const string& prefix, string& str) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();

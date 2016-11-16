@@ -51,19 +51,12 @@ namespace glad {
         tst(const std::string& filename) {
             uint_t n = 0, N = 0, max_weight = 0;
             tVPSU string_weight;
-            DEBUG_STDOUT("-- start getting input\n");
             process_input(filename, string_weight);
-            DEBUG_STDOUT("-- end getting input\n");
-            DEBUG_STDOUT("-- start processing input (sort + unique)\n");
             sort_unique(string_weight);
-            DEBUG_STDOUT("-- end processing input\n");
             std::for_each( string_weight.begin() , string_weight.end(), [&n,&max_weight](const tPSU& a) {
                 n+= a.first.size();
                 if ( a.second > max_weight ) max_weight = a.second; 
             });
-            
-            DEBUG_STDOUT("-- building strings & weights\n");
-            DEBUG_STDOUT(sizeof(tPSU) << " " << sizeof(string) << " " << sizeof(string*) << endl); 
             sdsl::int_vector<> weights ( string_weight.size(), 0, bits::hi(max_weight)+1 );
             tVS strings;
             strings.reserve( string_weight.size() );
@@ -73,15 +66,9 @@ namespace glad {
                   strings.push_back(std::move(a.first));
                   i++;
             });
-            DEBUG_STDOUT("-- erasing string_weight\n");
             decltype(string_weight){}.swap(string_weight);
             m_weight = t_weight( std::move(weights) );
-            DEBUG_STDOUT("-- end building strings & weights\n");
-            DEBUG_STDOUT("-- N: " << strings.size() << " , n: " << n << " , max_weight: " << max_weight << endl);
-            DEBUG_STDOUT("-- start build_tst_bp\n");
-            build_tst_bp(strings, strings.size(), n, max_weight);
-            DEBUG_STDOUT("-- end build_tst_bp\n");
-            
+            build_tst_bp(strings, strings.size(), n, max_weight);            
             m_rmq = t_rmq(&m_weight);
             assert(count_leaves() == strings.size());
         }
@@ -93,7 +80,7 @@ namespace glad {
             constexpr size_t g = 5; // "guess" constant multiplier
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             std::string new_prefix(prefix.size(), 0);
-            auto v       = blind_search(prefix, new_prefix);
+            auto v       = search(prefix, new_prefix);
             auto range   = prefix_range(v);
             auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
             tVPSU result_list;
@@ -125,41 +112,6 @@ namespace glad {
                 size_in_bytes(m_rmq) +
                 size_in_bytes(m_helper);
             return size;
-        }
-        
-        void print_bv(sdsl::bit_vector bv) {
-            if (bv.size() < 200) {
-            for ( auto it = bv.begin() ; it != bv.end(); it++ )
-                std::cout << *it << " ";
-            std::cout << std::endl;
-            }
-        }
-        
-        void print_label() {
-            if ( m_label.size() < 100 ) {
-                std::string l;
-                std::string s;
-                auto lit = m_label.begin();
-                auto sit = m_start_bv.begin();
-                for ( ; sit != m_start_bv.end(); sit++ ) {
-                    if (*sit == 1) {
-                        l.push_back(' ');
-                        s.push_back('1');
-                    } else {
-                        char ch = (*lit == EOS) ? '0' : *lit; lit++;
-                        l.push_back(ch);
-                        s.push_back('0');
-                    }
-                }
-                cout << "L : " << l << endl;
-                cout << "S : " << s << endl;
-            }
-        }
-        
-        void print() {
-            cout << "BP: "; print_bv(m_bp);
-            cout << "H : "; print_bv(m_helper);
-            print_label();
         }
         
     private:
@@ -247,7 +199,7 @@ namespace glad {
                         stk.emplace(f.node->eqnode, sx, dx, f.index+1, false, true);
                         if  ( f.sx < sx )
                             stk.emplace(f.node->lonode, f.sx, sx-1, f.index, false, false);
-                    } else{
+                    } else {
                         std::cout << "ERROR\n";
                     }
                 } else {
@@ -330,7 +282,6 @@ namespace glad {
             compress(node->hinode);
         }
         
-        // TODO more "elegant" way? maybe using stl
         inline tTUUC partitionate(const tVS& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
@@ -443,14 +394,14 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         t_range prefix_range(const std::string& prefix) const {
-            int64_t v = blind_search(prefix);
+            int64_t v = search(prefix);
             if ( v < 0 ) return {{1,0}};
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
         /* actually this kind of "blind search" is useful if a string is not represented in the tst */
         D ( __attribute__((noinline)) )
-        int64_t blind_search(const string& prefix, string& str) const {
+        int64_t search(const string& prefix, string& str) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
             const size_t pref_len = prefix.size();
