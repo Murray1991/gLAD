@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[ ! $# -gt 0 ] && echo "Usage: ./tests.sh K [record|stat]" && exit 1
+[ ! $# -gt 0 ] && echo "Usage: ./tests.sh K TestCase [record|stat]" && exit 1
 
 #perf directory
 DIR="./perf"
@@ -21,7 +21,8 @@ PERF_OPTS_STAT="-e instructions:u,L1-dcache-loads,L1-dcache-loads-misses,cache-r
 #executables and parameters
 FILE="./data/enwiki-20160601-all-titles"
 K=$1
-ARG=$2
+FILE=$2
+ARG=$3
 
 function execute {
     QUER=$1
@@ -51,6 +52,4 @@ function execute {
     echo "$EXE4 ..."; $EXE4
 }
 
-execute "./test/test_cases/big_range_queries1.txt"
-execute "./test/test_cases/big_range_queries2.txt"
-execute "./test/test_cases/range_queries.txt"
+execute $FILE
