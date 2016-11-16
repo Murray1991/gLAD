@@ -77,16 +77,15 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         tVPSU top_k (std::string prefix, size_t k) const {
-            constexpr size_t g = 5; // "guess" constant multiplier
             std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
             std::string new_prefix(prefix.size(), 0);
             auto v       = search(prefix, new_prefix);
             auto range   = prefix_range(v);
-            auto top_idx = heaviest_indexes(range, k); /* TODO optimization: return v's instead thand idx... */
+            auto top_idx = heaviest_indexes(range, k);
             tVPSU result_list;
             for (auto idx : top_idx){
                 std::string s;
-                s.reserve(g*prefix.size());
+                s.reserve(avgstrsize);
                 s += new_prefix;
                 s += std::move( build_string(m_bp_sel10(idx+1)-1, parent(v)) );
                 result_list.push_back(tPSU(std::move(s), m_weight[idx]));
@@ -363,8 +362,8 @@ namespace glad {
         D ( __attribute__((noinline)) )
         std::string build_string(const size_t v_from, const size_t v_to) const {
             const char * data = (const char *) m_label.data();
-            std::vector<bool> b; b.reserve(50);      //100 is a "guess size"
-            std::vector<size_t> v; v.reserve(50);    //100 is a "guess size"
+            std::vector<bool> b; b.reserve(avgstrsize);      //100 is a "guess size"
+            std::vector<size_t> v; v.reserve(avgstrsize);    //100 is a "guess size"
             v.push_back(0);
             b.push_back(true);
             for ( size_t k = v_from ; k != v_to ; ) {
@@ -373,7 +372,7 @@ namespace glad {
                 b.push_back(check_if_eqnode(k,p));
                 k = p;
             }
-            std::string str; str.reserve(50);      //guess
+            std::string str; str.reserve(avgstrsize);      //guess
             size_t start, end;
             const size_t last = v.size()-1;
             for ( size_t i = last; i > 0; i-- ) {

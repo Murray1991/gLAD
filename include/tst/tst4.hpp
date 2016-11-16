@@ -307,7 +307,6 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         void handleA(const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list) {
-            constexpr size_t g = 2;
             const char * data = (const char *) m_label.data();
             size_t l = m_bp_sel10(range[0]+1)-1;
             size_t first = m_first[range[0]];
@@ -342,7 +341,7 @@ namespace glad {
                 for (auto idx : top_idx) {
                     t_range r = positions(l, first, idx, 0);
                     std::string apnd(data + r[0], r[1] - r[0]);
-                    s.reserve(g * prefix.size()); //magic
+                    s.reserve(avgstrsize);
                     s += str0;
                     s += std::move(apnd);
                     if (s.back() == EOS) s.pop_back();
@@ -384,7 +383,6 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         void handleB(const size_t v, const t_range& range, const std::string& prefix, const std::string& new_prefix, size_t k, tVPSU& result_list)  {
-            constexpr size_t g = 5; // "guess" constant multiplier
             const char * data = (const char *) m_label.data();
             size_t first = m_first[range[0]];
             size_t last  = range[1] < m_first.size()-1 ? m_first[range[1]+1]-1 : m_weight.size()-1;
@@ -396,7 +394,7 @@ namespace glad {
                 size_t b = find_bucket_range(idx, range);
                 size_t l = m_bp_sel10(b+1)-1;
                 auto r = positions(l, m_first[b], idx, 0);
-                s.reserve(g * prefix.size());
+                s.reserve(avgstrsize);
                 s += new_prefix;
                 s += std::move( build_string(l, parent(v)) );
                 s.append(data + r[0], r[1] - r[0]);
@@ -476,12 +474,11 @@ namespace glad {
                      ( h1 && m_bp_support.find_close(cv)+1 == v ));
         }
         
-        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via blind search or 0)*/
-        /* attempt to optimization... should be better than previous solution... */
+        /* build string from node v_from upwards to node v_to (v_to is the parent of the node found via search or 0)*/
         D ( __attribute__((noinline)) )
         std::string build_string(const size_t v_from, const size_t v_to) const {
-            std::vector<bool> b; b.reserve(50);    // "guess size"
-            std::vector<size_t> v; v.reserve(50);    //"guess size"
+            std::vector<bool> b; b.reserve(avgstrsize);
+            std::vector<size_t> v; v.reserve(avgstrsize);
             v.push_back(0);
             b.push_back(true);
             for ( size_t k = v_from ; k != v_to ; ) {
@@ -492,7 +489,7 @@ namespace glad {
             }
 	    
             std::string str; 
-            str.reserve(100); //guess
+            str.reserve(avgstrsize);
             size_t start, end;
             const size_t last = v.size()-1;
             for ( size_t i = last; i > 1; i-- ) {
