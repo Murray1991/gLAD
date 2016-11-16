@@ -87,5 +87,23 @@ namespace glad {
                 out << it->first << " " << it->second << "\n";
             }
     }
+    
+    /*return position of char relative to the string*/
+    size_t findch (const char * str, char ch, size_t n) {
+        size_t i;
+        for (i = 0; str[i] != ch && i < n; i++);
+        return (i < n)*i + (i==n)*std::string::npos;
+    }
+    
+    /* return position relative to the string */
+    size_t findstr (const char * str0, size_t n0, const char * str1, size_t n1) {
+        for ( size_t i = 0, j = 0, k = 0; j < n0 && i < n0; i += j + k) {
+            j = findch(str0 + i, str1[0], n0 - i);                                          //j position of first char
+            for ( k = 1 ; k < n1 && i + j + k < n0 && str0[i+j+k] == str1[k] ; k++ );       //increment k
+            if ( k == n1 )
+                return i+j;
+        }
+        return std::string::npos;
+    }
 }
 
