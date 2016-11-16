@@ -29,6 +29,9 @@ namespace glad {
     typedef std::vector<std::string>                  tVS;
     typedef std::array<size_t,2>                        t_range;
     
+    
+    static constexpr int avgstrsize = 30;
+    
     void sort_sw(tVPSU& string_weight) {
         std::sort(string_weight.begin(), string_weight.end(), [](const tPSU& a, const tPSU& b) {
             return a.second < b.second;
