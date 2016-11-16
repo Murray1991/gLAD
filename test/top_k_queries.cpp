@@ -61,7 +61,6 @@ int main(int argc, char *argv[]) {
     glad::trunc_file(out_file);
     auto start = chrono::high_resolution_clock::now();
     for ( auto& prefix : prefixes ) {
-        //cout << "search for '" << prefix << "'\n";
         auto query_start = chrono::high_resolution_clock::now(); 
         auto result_list = index.top_k(prefix, k);
         auto query_time  = chrono::high_resolution_clock::now() - query_start;
@@ -77,7 +76,7 @@ int main(int argc, char *argv[]) {
     std::ifstream t(out_file);
     std::stringstream buffer;
     buffer << t.rdbuf();
-    //std::remove(out_file.c_str());
+    std::remove(out_file.c_str());
      
     std::hash<std::string> hash_fn;
     size_t buffer_hash = hash_fn(buffer.str());
