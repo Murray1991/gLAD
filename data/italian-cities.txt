@@ -69,9 +69,6 @@ Imola	69116
 La Spezia	95378
 Lamezia Terme	71286
 Latina	119804
-Latina	119804
-Latina	119804
-Latina	119804
 Lecce	95520
 Legnano	59147
 Livorno	157052
@@ -102,10 +99,8 @@ Perugia	162449
 Pesaro	95011
 Pescara	123077
 Piacenza	103206
-Pis		1	
 Pisa	88217
-Pisarno	0
-Pisarnoia	90288
+Pistoia	90288
 Pomezia	61106
 Pordenone	51723
 Portici	53981
@@ -122,8 +117,6 @@ Rimini	143321
 Rome	2617175
 Rovigo	52793
 Salerno	139019
-Salerno	13901
-Salerno	13901
 San Severo	55321
 Sanremo	56962
 Sassari	130658
@@ -135,16 +128,12 @@ Siena	54543
 Syracuse	123850
 Taranto	200154
 Teramo	54957
-Teramo	54957
-Teramo	54957
 Terni	113324
 Tivoli	56531
 Torre del Greco	87197
 Trani	53940
 Trapani	70622
 Trento	116298
-Treviso	82
-Treviso	807
 Treviso	82807
 Trieste	202123
 Turin	872367
