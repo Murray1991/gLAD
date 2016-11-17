@@ -15,7 +15,7 @@ do
     for test in `ls $TESTDIR`
     do
         echo "... for $TESTDIR$test ..."
-        ./testK.sh $index $TESTDIR$test $FILE >> results/$INDEX$index.$WHERE.$F.dat
+        ./testK.sh $index $TESTDIR$test $FILE >> results/$INDEX$index.$WHERE.$F.$test.dat
     done
 done
 
