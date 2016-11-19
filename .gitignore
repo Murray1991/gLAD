@@ -9,4 +9,4 @@ perf*
 perf/
 *.txt
 *.old
-
+*.tar.gz
