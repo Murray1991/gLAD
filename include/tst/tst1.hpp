@@ -298,7 +298,6 @@ namespace glad {
         
         D ( __attribute__((noinline)) )
         int64_t map_to_edge(size_t v, uint8_t ch1, uint8_t ch2) const {
-            //DEBUG_STDOUT(v << " , " << get_label(v) << " | " << children(v) << " | " << m_helper[node_id(v)-1] << endl);
             size_t cv = v+1;
             for ( bool b = false, h = false; m_bp[cv] ; b = h ) {
                 // "eqnode" is always present for internal nodes: (h == true) => (b = true)
