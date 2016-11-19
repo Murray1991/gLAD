@@ -47,10 +47,14 @@ function execute {
     fi
 
     #tests...
-    echo "$EXE1 ..."; $EXE1
-    echo "$EXE2 ..."; $EXE2
-    echo "$EXE3 ..."; $EXE3
-    echo "$EXE4 ..."; $EXE4
+    T=$( $EXE1 )
+    echo "[tst1] $T"
+    T=$( $EXE2 )
+    echo "[tst2] $T"
+    T=$( $EXE3 )
+    echo "[tst3] $T"
+    T=$( $EXE4 )
+    echo "[tst4] $T"
 }
 
 execute $QUER
