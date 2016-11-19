@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     std::ifstream t(out_file);
     std::stringstream buffer;
     buffer << t.rdbuf();
-    std::remove(out_file.c_str());
+    //std::remove(out_file.c_str());
      
     std::hash<std::string> hash_fn;
     size_t buffer_hash = hash_fn(buffer.str());
