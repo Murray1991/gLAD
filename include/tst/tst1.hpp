@@ -17,8 +17,8 @@ using namespace sdsl;
 
 namespace glad {
     
-    template< typename t_bv = sdsl::bit_vector,
-         typename t_sel= typename t_bv::select_1_type,
+  template<typename t_bv = sdsl::sd_vector<>,
+	 typename t_sel= typename t_bv::select_1_type,
          typename t_weight = sdsl::vlc_vector<>,
          typename t_rmq = sdsl::rmq_succinct_sct<0>,
          typename t_bp_support = sdsl::bp_support_sada<>,
@@ -34,7 +34,7 @@ namespace glad {
         t_label             m_label;
         t_weight            m_weight;
         t_bv_uc             m_bp;
-        t_bv                m_helper;
+        t_bv_uc             m_helper;
         t_bp_support        m_bp_support;
         t_bv                m_start_bv;
         t_sel               m_start_sel;
@@ -129,14 +129,14 @@ namespace glad {
         
         void build_tst_bp(tVS& strings, uint64_t N, uint64_t n, uint64_t max_weight) {
             t_bv_uc                   start_bv(2*N+n+2, 0);
-            t_bv_uc                   helper(n+N,0);
-            int_vector<8> labels      = int_vector<8>(n);
+            m_helper                  = t_bv_uc(n+N,0);
+            m_label                   = t_label(n);
             m_bp                      = t_bv_uc(2*2*N, 0);
             
             bp_it                     = m_bp.begin();
             start_it                  = start_bv.begin();
-            label_it                  = labels.begin();
-            helper_it                 = helper.begin();
+            label_it                  = m_label.begin();
+            helper_it                 = m_helper.begin();
             *(start_it++) = 1;
             
             std::cout << "-- build tst...\n";
@@ -145,18 +145,16 @@ namespace glad {
             
             std::cout << "-- resizing bit vectors...\n";
             m_bp.resize(bp_it-m_bp.begin()); 
-            labels.resize(label_it-labels.begin());
-            helper.resize(helper_it-helper.begin());
+            m_label.resize(label_it-m_label.begin());
+            m_helper.resize(helper_it-m_helper.begin());
             start_bv.resize(start_it-start_bv.begin());
             
             std::cout << "-- building data structures...\n";
             m_start_bv   = t_bv(start_bv);
-            m_helper    = t_bv(helper);
-            m_label      = t_label(labels);
             m_start_sel  = t_sel(&m_start_bv);
             m_bp_support = t_bp_support(&m_bp);
-            util::init_support(m_bp_rnk10, &m_bp);
-            util::init_support(m_bp_sel10, &m_bp);
+            m_bp_rnk10   = t_bp_rnk10(&m_bp);
+            m_bp_sel10   = t_bp_sel10(&m_bp);
         }
         
         struct frame {
