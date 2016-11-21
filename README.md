@@ -7,14 +7,7 @@ Simple autocompletion application written in C++11 based on a succinct represent
 * `./install.sh`
 * `make build && make main`
 
-## User manual
-In `data` folder are provided two simple dictionary files to test the application. 
-Each file line MUST be composed by a string and a weight separated by a TAB. 
-
-You can download a bigger dictionary file (the one used for the tests that list titles and click counts of Wikipedia pages)
-* `cd data`
-* `./download.sh`
-
+## Run the program
 After the installation, in `build` there will be the executables for each different version (see report.pdf for additional informations).
 In order to run, for example, the program of the first version using the `italian-cities.txt` file and K equal to 5:
 * `./build/main.tst1.bin ./data/italian-cities.txt 5`
@@ -31,6 +24,13 @@ In order to run, for example, the program of the first version using the `italia
 * `report.pdf`: the report of the project
 
 ## Test
+In `data` folder are provided two simple dictionary files to test the application. 
+Each file line MUST be composed by a string and a weight separated by a TAB. 
+
+You can download a bigger dictionary file (the one used for the tests that list titles and click counts of Wikipedia pages)
+* `cd data`
+* `./download.sh`
+
 Compile the test program for each version
 * `make test`
 
