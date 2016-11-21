@@ -37,8 +37,7 @@ void build_strings(std::string file, std::vector<std::string> &strings) {
 
 int main(int argc, char *argv[]) {
     if ( argc != 4 ) {
-        std::cerr << argc << "...";
-        std::cerr << "fatal error, need two args" << std::endl;
+        std::cerr << "Fatal error, need two args" << std::endl;
         exit(EXIT_FAILURE);
     }
     
@@ -76,7 +75,7 @@ int main(int argc, char *argv[]) {
     std::ifstream t(out_file);
     std::stringstream buffer;
     buffer << t.rdbuf();
-    //std::remove(out_file.c_str());
+    std::remove(out_file.c_str());
      
     std::hash<std::string> hash_fn;
     size_t buffer_hash = hash_fn(buffer.str());

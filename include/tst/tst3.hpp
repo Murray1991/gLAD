@@ -73,7 +73,7 @@ namespace glad {
             build_tst_bp(strings, strings.size(), n, max_weight);
             
             m_rmq = t_rmq(&m_weight);            
-            assert(count_leaves() == strings.size());
+            D ( assert(count_leaves() == strings.size()); )
         }
         
         D ( __attribute__((noinline)) )
@@ -167,11 +167,10 @@ namespace glad {
         };
         
         tnode * build_tst (tVS& strings) {
-            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index, bool markval) {
+            auto fun = [&] (tnode*& node, int_t start, int_t end, int_t index, bool markval) {
                 node = rec_build_tst (strings, start, end, index);
                 compress(node);
                 mark(node, markval);
-                b = node != 0;
                 delete node;
                 node = nullptr;
             };
@@ -198,10 +197,9 @@ namespace glad {
                     *(helper0_it++) = h0;
                     *(helper1_it++) = h0 ? (lo != 0) : (lo && eq && hi);
                     if ( f.index == 1 ) {
-                        bool a, b, c;
-                        fun(f.node->lonode, a, f.sx, sx-1, f.index, false);
-                        fun(f.node->eqnode, b, sx, dx, f.index+1, true);
-                        fun(f.node->hinode, c, dx+1, f.dx, f.index, false);
+                        fun(f.node->lonode, f.sx, sx-1, f.index, false);
+                        fun(f.node->eqnode, sx, dx, f.index+1, true);
+                        fun(f.node->hinode, dx+1, f.dx, f.index, false);
                     } else if ( f.index < 1 ) {
                         if ( dx < f.dx )
                             stk.emplace(f.node->hinode, dx+1, f.dx, f.index, false, false);
@@ -210,6 +208,7 @@ namespace glad {
                             stk.emplace(f.node->lonode, f.sx, sx-1, f.index, false, false);
                     } else{
                         std::cout << "ERROR\n";
+                        std::exit(EXIT_FAILURE);
                     }
                 } else {
                     stk.pop();
@@ -409,13 +408,6 @@ namespace glad {
         }
         
         D ( __attribute__((noinline)) )
-        t_range prefix_range(const std::string& prefix) const {
-            int64_t v = search(prefix);
-            if ( v < 0 ) return {{1,0}};
-            return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
-        }
-        
-        D ( __attribute__((noinline)) )
         void label_copy(size_t start, std::string& str, size_t i, size_t len) const {
             for (size_t k = i, j = 0; j < len; j++, k++)
                 str[k] = m_label[start+j];
@@ -434,7 +426,7 @@ namespace glad {
             while ( plen >= llen && i != pref_len && v >= 0 ) {
                 i     += llen-1;
                 v     = map_to_edge(v, prefix.at(i), data[end-1]);
-                if ( v < 0 ) return v;  //TODO is it possible to optimize?
+                if ( v < 0 ) return v;
                 i     += (prefix.at(i) == data[end-1]);
                 plen  = pref_len-i;
                 start = get_start_label(v);

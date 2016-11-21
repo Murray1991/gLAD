@@ -70,7 +70,7 @@ namespace glad {
             m_weight = t_weight( std::move(weights) );
             build_tst_bp(strings, strings.size(), n, max_weight);            
             m_rmq = t_rmq(&m_weight);
-            assert(count_leaves() == strings.size());
+            D ( assert(count_leaves() == strings.size()); )
         }
         
     public:    
@@ -161,11 +161,10 @@ namespace glad {
         };
         
         tnode * build_tst (tVS& strings) {
-            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index, bool markval) {
+            auto fun = [&] (tnode*& node, int_t start, int_t end, int_t index, bool markval) {
                 node = rec_build_tst (strings, start, end, index);
                 compress(node);
                 mark(node, markval);
-                b = node != 0;
                 delete node;
                 node = nullptr;
             };
@@ -186,10 +185,9 @@ namespace glad {
                     *(label_it++) = ch;
                     *(helper_it++) = f.sx < sx;  //lonode != nullptr
                     if ( f.index == 1 ) {
-                        bool lo, eq, hi;
-                        fun(f.node->lonode, lo, f.sx, sx-1, f.index, false);
-                        fun(f.node->eqnode, eq, sx, dx, f.index+1, true);
-                        fun(f.node->hinode, hi, dx+1, f.dx, f.index, false);
+                        fun(f.node->lonode, f.sx, sx-1, f.index, false);
+                        fun(f.node->eqnode, sx, dx, f.index+1, true);
+                        fun(f.node->hinode, dx+1, f.dx, f.index, false);
                     } else if ( f.index < 1 ) {
                         if ( dx < f.dx )
                             stk.emplace(f.node->hinode, dx+1, f.dx, f.index, false, false);
@@ -198,6 +196,7 @@ namespace glad {
                             stk.emplace(f.node->lonode, f.sx, sx-1, f.index, false, false);
                     } else {
                         std::cout << "ERROR\n";
+                        std::exit(EXIT_FAILURE);
                     }
                 } else {
                     stk.pop();
@@ -389,14 +388,6 @@ namespace glad {
             return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
         }
         
-        D ( __attribute__((noinline)) )
-        t_range prefix_range(const std::string& prefix) const {
-            int64_t v = search(prefix);
-            if ( v < 0 ) return {{1,0}};
-            return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
-        }
-        
-        /* actually this kind of "blind search" is useful if a string is not represented in the tst */
         D ( __attribute__((noinline)) )
         int64_t search(const string& prefix, string& str) const {
             int64_t v = 0, i = 0;

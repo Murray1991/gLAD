@@ -71,9 +71,9 @@ namespace glad {
             build_tst_bp(strings, strings.size(), n, max_weight);
             
             m_rmq = t_rmq(&m_weight);
-            cout << count_leaves() << endl;
-            cout << strings.size() << endl;
-            assert(count_leaves() == strings.size());
+            D ( cout << count_leaves() << endl; )
+            D ( cout << strings.size() << endl; )
+            D ( assert(count_leaves() == strings.size()); )
         }
         
         D ( __attribute__((noinline)) )
@@ -110,14 +110,6 @@ namespace glad {
                 size_in_bytes(m_rmq) +
                 size_in_bytes(m_helper);
             return size;
-        }
-        
-        void print_bv(sdsl::bit_vector bv) {
-            if (bv.size() < 200) {
-            for ( auto it = bv.begin() ; it != bv.end(); it++ )
-                std::cout << *it << " ";
-            std::cout << std::endl;
-            }
         }
         
     private:
@@ -168,11 +160,10 @@ namespace glad {
         };
         
         tnode * build_tst (tVS& strings) {
-            auto fun = [&] (tnode*& node, bool& b, int_t start, int_t end, int_t index, bool markval) {
+            auto fun = [&] (tnode*& node, int_t start, int_t end, int_t index, bool markval) {
                 node = rec_build_tst (strings, start, end, index);
                 compress(node);
                 mark(node, markval);
-                b = node != 0;
                 delete node;
                 node = nullptr;
             };
@@ -193,10 +184,9 @@ namespace glad {
                     *(label_it++) = ch;
                     *(helper_it++) = f.markval;
                     if ( f.index == 1 ) {
-                        bool lo, eq, hi;
-                        fun(f.node->lonode, lo, f.sx, sx-1, f.index, false);
-                        fun(f.node->eqnode, eq, sx, dx, f.index+1, true);
-                        fun(f.node->hinode, hi, dx+1, f.dx, f.index, false);
+                        fun(f.node->lonode, f.sx, sx-1, f.index, false);
+                        fun(f.node->eqnode, sx, dx, f.index+1, true);
+                        fun(f.node->hinode, dx+1, f.dx, f.index, false);
                     } else if ( f.index < 1 ) {
                         if ( dx < f.dx )
                             stk.emplace(f.node->hinode, dx+1, f.dx, f.index, false, false);
@@ -205,6 +195,7 @@ namespace glad {
                             stk.emplace(f.node->lonode, f.sx, sx-1, f.index, false, false);
                     } else{
                         std::cout << "ERROR\n";
+                        std::exit(EXIT_FAILURE);
                     }
                 } else {
                     stk.pop();
@@ -381,13 +372,6 @@ namespace glad {
         }
         
         D ( __attribute__((noinline)) )
-        t_range prefix_range(const std::string& prefix) const {
-            int64_t v = search(prefix);
-            if ( v < 0 ) return {{1,0}};
-            return {{m_bp_rnk10(v), m_bp_rnk10(m_bp_support.find_close(v)+1)-1}};
-        }
-        
-        D ( __attribute__((noinline)) )
         int64_t search(const string& prefix, string& str) const {
             int64_t v = 0, i = 0;
             const char * data = (const char *) m_label.data();
@@ -425,15 +409,6 @@ namespace glad {
         D ( __attribute__((noinline)) )
         size_t node_id(size_t v) const{
             return m_bp_support.rank(v);
-        }
-        
-        D ( __attribute__((noinline)) )
-        string get_label(size_t v) const {
-            const char * data = (const char *) m_label.data();
-            auto i = get_start_label(v);
-            auto o = get_end_label(v);
-            string s(data+i, o-i);
-            return s;
         }
         
         D ( __attribute__((noinline)) )

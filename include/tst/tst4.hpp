@@ -88,8 +88,10 @@ namespace glad {
             auto range   = prefix_range(v);
             tVPSU result_list;
             if (v >= 0 && is_leaf(v)) {
+                //Case A: search in leaf
 		handleA(range, prefix, new_prefix, k, result_list);
             } else if ( v >= 0 && range[0] <= range[1] ) {
+                //Case B: Find the leaves
                 handleB(v, range, prefix, new_prefix, k, result_list);
             }
             return result_list;
@@ -199,7 +201,6 @@ namespace glad {
         }
         
         int_t count_chars (tVS& strings, int_t first, int_t last, int_t index) const {
-	  assert ( last - first < thresh );
 	  int_t count = 0;
             for ( size_t i = first; i <= last; i++ ) {
                 count += (strings[i].size() - index);
@@ -269,7 +270,6 @@ namespace glad {
             compress(node->hinode);
         }
         
-        // TODO more "elegant" way?
         inline tTUUC partitionate(const tVS& strings, uint64_t first, uint64_t last, uint64_t index) {
             uint64_t m = first + (last-first)/2;
             uint64_t sx, dx;
