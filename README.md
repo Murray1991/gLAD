@@ -7,51 +7,67 @@ Simple autocompletion application written in C++11 based on a succinct represent
 * `./install.sh`
 * `make build && make main`
 
+After the installation, in `build` directory there will be the executables for each different version. Differences between versions are explained in **report.pdf** file.
+
 ## Run the program
-After the installation, in `build` there will be the executables for each different version (see report.pdf for additional informations).
-In order to run, for example, the program of the first version using the `italian-cities.txt` file and K equal to 5:
-* `./build/main.tst1.bin ./data/italian-cities.txt 5`
+In order to build the index of the file `italian-cities.txt` and run the program for the first version with K=5
+* `./build/main.tst1.bin data/italian-cities.txt 5`
 
-## Content of this folder
-* `data/`: data directory with two sample dictionary files to test the application and a bash script to download a bigger dictionary file
-* `include/tst/`: directory with the implementations of the different versions of the index (tst*.hpp)
-* `src/`: directory with the program main
-* `test/`: directory containing the `top_k_queries.cpp` test program and the subfolder `test_cases/` which contains files in which each line represent a query.
-* `Makefile`: for the compilation of the applications and the tests
-* `build_indexes.sh`: simple script that builds the indexes for a file
-* `collect_results.sh`, `testK.sh`, `tests.sh`: scripts used for testing.
-* `README.md`: this readme
-* `report.pdf`: the report of the project
+You can build the indexes for each version using the script `build_indexes.sh`
+* `./build_indexes.sh data/italian-cities.txt`
 
-## Test
-In `data` folder are provided two simple dictionary files to test the application. 
-Each file line MUST be composed by a string and a weight separated by a TAB. 
+## Dictionary
+In `data` folder are provided two simple dictionary files to test the application. Each file line MUST be composed by a string and a weight separated by a TAB. 
 
 You can download a bigger dictionary file (the one used for the tests that list titles and click counts of Wikipedia pages)
 * `cd data`
 * `./download.sh`
 
-Compile the test program for each version
+## Content of this folder
+* `data/`: data directory with the dictionary files and the indexes built by the application
+
+* `include/tst/`: directory with the implementations of the different versions of the index (tst*.hpp files)
+
+* `src/`: directory with the program main source file
+
+* `test/`: directory with the test main source file `top_k_queries.cpp` and a subdirectory `test_cases` with some query files.
+
+* `Makefile`: for the compilation of the applications and the tests
+
+* `build_indexes.sh`: simple script that builds the indexes for a file
+
+* `collect_results.sh`, `testK.sh`, `tests.sh`: scripts used for testing.
+
+* `README.md`: this readme
+
+* `report.pdf`: the report of the project
+
+## Test
+Compile the test programs and build the indexes (long process for big dictionaries)
 * `make test`
+* `./build_indexes.sh data/italian-cities.txt`
 
-Build the indexes (this can take some hundreds of seconds)
-* `./build_indexes.sh ./data/italian-cities.txt`
+Script `tests.sh` tests each version with the queries contained in a test case file (e.g. `range_queries.txt`) and give the following output format:
+* `[IndexName] K  Time(us)  ResultsFound  SizeOfQueryFile  HashValue`
 
-Test each version using K=5, test case `range_queries.txt` and dictionary file `italian-cities.txt`
-Output format: [name] K  Time(us)  ResultsFound  SizeOfQueryFile  HashValue
-* `./tests.sh 5 ./test/test_cases/range_queries.txt ./data/italian-cities.txt`
+Example over the test case file `range_queries.txt`, the dictionary `italian-cities.txt` and K=5:
+* `./tests.sh 5 test/test_cases/range_queries.txt data/italian-cities.txt`
 
-Test *tst1* version varying with K with the same test case file and dictionary file
-* `./testK.sh 1 ./test/test_cases/range_queries.txt ./data/italian-cities.txt`
+Script `testK.sh` tests one version with the queries contained in a test case file and different values of K. Example for the **tst4** version over the test case file `range_queries.txt` and dictionary `italian-cities.txt`
+* `./testK.sh 4 test/test_cases/range_queries.txt data/italian-cities.txt`
 
 ## Results in a nutshell
-Each version has been tested using a dictionary from a file over titles and click counts of Wikipedia pages. The file of ~900 MB (cleaned from duplicates is about ~630 MB) has about ~30M of unique strings and the indexes generated are about ~320 MB. Time for the construction of an index is ~200 seconds. Top-5 queries are completed under 1 millisecond, further informations in `report.pdf`.
+Each version has been tested using a dictionary from a file over titles and click counts of Wikipedia pages. The file of ~900 MB has about ~30M of unique strings and the indexes generated are about ~320 MB. Time for the construction of an index is ~300 seconds. Top-5 queries are completed in few hundreds microseconds, further informations in `report.pdf`.
 
 ## Enviroment used
 The tests have been done on a workstation providing an Intel XEON CPU E5-260 (8 core clocked at 2GHz, two private levels of cache per core and one level shared). Compiler used: gcc (GCC) 4.9.4
 
 ## Known Issues
 * Slow in building the index for big files and very memory consuming in this phase.
+
+## TODO list
+* Use the approach for the version 4 in version 1, should be faster
+* Investigate if the resulting indexes can be reduced in space
 
 ## License
 This code is licensed under [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/)
